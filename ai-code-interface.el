@@ -1,7 +1,7 @@
 ;;; ai-code-interface.el --- AI code interface for editing AI prompt files -*- lexical-binding: t; -*-
 
 ;; Author: Kang Tu <tninja@gmail.com>
-;; Version: 0.16
+;; Version: 0.20
 ;; Package-Requires: ((emacs "26.1") (transient "0.8.0") (magit "2.1.0"))
 
 ;; SPDX-License-Identifier: Apache-2.0
@@ -24,6 +24,8 @@
 (require 'ai-code-git)
 (require 'ai-code-change)
 (require 'ai-code-discussion)
+(require 'ai-code-codex-cli)
+(require 'ai-code-github-copilot-cli)
 
 ;; Forward declarations for dynamically defined backend functions
 (declare-function ai-code-cli-start "ai-code-backends")
