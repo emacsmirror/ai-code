@@ -1,7 +1,7 @@
 ;;; ai-code-interface.el --- AI code interface for editing AI prompt files -*- lexical-binding: t; -*-
 
 ;; Author: Kang Tu <tninja@gmail.com>
-;; Version: 0.20
+;; Version: 0.21
 ;; Package-Requires: ((emacs "26.1") (transient "0.8.0") (magit "2.1.0"))
 
 ;; SPDX-License-Identifier: Apache-2.0
@@ -253,7 +253,7 @@ Shows the current backend label to the right."
    ["AI Code Actions"
     (ai-code--infix-toggle-suffix)
     ("c" "Code change (C-u: global)" ai-code-code-change)
-    ("i" "Implement TODO" ai-code-implement-todo)
+    ("i" "Implement TODO (C-u: keep it)" ai-code-implement-todo)
     ("q" "Ask question (C-u: global)" ai-code-ask-question)
     ("x" "Explain code" ai-code-explain)
     ("<SPC>" "Send command to AI" ai-code-send-command)
