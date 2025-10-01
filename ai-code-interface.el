@@ -117,6 +117,7 @@ Shows the current backend label to the right."
     ("z" "Switch to AI CLI" ai-code-cli-switch-to-buffer-or-hide)
     ("s" ai-code--select-backend-description ai-code-select-backend)
     ("g" "Open backend config (eg. add mcp)" ai-code-open-backend-config)
+    ("|" "Apply prompt on file" ai-code-apply-prompt-on-current-file)
     ]
    ["AI Code Actions"
     (ai-code--infix-toggle-suffix)
@@ -141,7 +142,6 @@ Shows the current backend label to the right."
     ("o" "Open Clipboard file dir" ai-code-open-clipboard-file-path-as-dired)
     ("." "Init projectile and tags" ai-code-init-project)
     ("m" "Debug python MCP server" ai-code-debug-mcp)
-    ("|" "Apply prompt on file" ai-code-apply-prompt-on-current-file)
     ]
    ])
 
