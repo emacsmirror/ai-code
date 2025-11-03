@@ -114,8 +114,7 @@ Returns a list of relative paths from the git repository root."
 ;;;###autoload
 (defun ai-code-investigate-exception (arg)
   "Generate prompt to investigate exceptions or errors in code.
-With a prefix argument (C-u), or if not in a programming mode buffer,
-prompt for investigation without adding any context.
+With a prefix argument (C-u), use context from clipboard as the error to investigate.
 If a *compilation* buffer is visible in the current window, use its full content as context.
 If a region is selected, investigate that specific error or exception.
 If cursor is in a function, investigate exceptions in that function.
@@ -123,9 +122,14 @@ Otherwise, investigate general exception handling in the file.
 Inserts the prompt into the AI prompt file and optionally sends to AI.
 Argument ARG is the prefix argument."
   (interactive "P")
-  (let* ((compilation-buffer (get-buffer "*compilation*"))
+  (let* ((clipboard-content (when arg
+                             (condition-case nil
+                                 (current-kill 0)
+                               (error nil))))
+         (compilation-buffer (get-buffer "*compilation*"))
          (compilation-content (when (and compilation-buffer
-                                        (get-buffer-window compilation-buffer))
+                                        (get-buffer-window compilation-buffer)
+                                        (not arg))
                                (with-current-buffer compilation-buffer
                                  (buffer-substring-no-properties (point-min) (point-max)))))
          (region-text (when (region-active-p)
@@ -139,13 +143,17 @@ Argument ARG is the prefix argument."
           (if full-buffer-context
               (concat "\n\nContext:\n" full-buffer-context)
             (concat
+             (when clipboard-content
+               (concat "\n\nClipboard context (error/exception):\n" clipboard-content))
              (when compilation-content
                (concat "\n\nCompilation output:\n" compilation-content))
-             (when (and region-text (not compilation-content))
+             (when (and region-text (not compilation-content) (not clipboard-content))
                (concat "\n\nSelected code:\n" region-text)))))
          (default-question "How to fix the error in this code? Please analyze the error, explain the root cause, and provide the corrected code to resolve the issue: ")
          (prompt-label
           (cond
+           (clipboard-content
+            "Investigate error from clipboard: ")
            (compilation-content
             "Investigate compilation error: ")
            (full-buffer-context
