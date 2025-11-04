@@ -124,7 +124,7 @@ Argument ARG is the prefix argument."
   (interactive "P")
   (let* ((clipboard-content (when arg
                              (condition-case nil
-                                 (current-kill 0)
+                               (current-kill 0)
                                (error nil))))
          (compilation-buffer (get-buffer "*compilation*"))
          (compilation-content (when (and compilation-buffer
