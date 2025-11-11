@@ -305,6 +305,81 @@ Call `ai-code-shell-cmd` when in dired mode, shell modes or a region is active; 
    (t
     (ai-code-run-current-file))))
 
+(defvar ai-code--repo-context-info (make-hash-table :test #'equal)
+  "Hash table storing context info lists per Git repository root.")
+
+;;;###autoload
+(defun ai-code-add-context ()
+  "Capture current buffer context and store it per Git repository.
+When no region is selected, use the full file path and current function (if any).
+When a region is active, use the file path with line range in the form filepath:Lstart-end."
+  (interactive)
+  (unless buffer-file-name
+    (user-error "Current buffer is not visiting a file"))
+  (let* ((repo-root (or (magit-toplevel)
+                        (user-error "Not inside a Git repository")))
+         (context
+          (if (use-region-p)
+              (let* ((start (region-beginning))
+                     (end (region-end))
+                     (start-line (line-number-at-pos (min start end)))
+                     (end-line (line-number-at-pos (max start end))))
+                (format "%s:L%d-%d" buffer-file-name start-line end-line))
+            (let ((function-name (when (fboundp 'which-function)
+                                   (which-function))))
+              (if (and function-name
+                       (stringp function-name)
+                       (not (string-empty-p function-name)))
+                  (format "%s:%s" buffer-file-name function-name)
+                buffer-file-name)))))
+    (let ((current (gethash repo-root ai-code--repo-context-info)))
+      (unless (member context current)
+        (setq current (cons context current)))
+      (puthash repo-root current ai-code--repo-context-info)
+      (message "Added context for %s: %s" repo-root context))))
+
+(defun ai-code-list-context ()
+  "Display stored context entries grouped by Git repository."
+  (interactive)
+  (if (= (hash-table-count ai-code--repo-context-info) 0)
+      (message "No stored context info.")
+    (with-current-buffer (get-buffer-create "*ai-code-context*")
+      (let ((inhibit-read-only t))
+        (read-only-mode -1)
+        (erase-buffer)
+        (insert "Stored AI Code contexts:\n\n")
+        (maphash
+         (lambda (repo contexts)
+           (insert (format "Repo: %s\n" repo))
+           (if contexts
+               (dolist (ctx (reverse contexts))
+                 (insert (format "  - %s\n" ctx)))
+             (insert "  (no entries)\n"))
+           (insert "\n"))
+         ai-code--repo-context-info)
+        (goto-char (point-min))
+        (read-only-mode 1)
+        (display-buffer (current-buffer))))))
+
+(defun ai-code-clear-context (&optional arg)
+  "Clear stored context entries.
+Without ARG, clear entries for the current Git repository.
+With prefix ARG, clear all repositories."
+  (interactive "P")
+  (if arg
+      (progn
+        (clrhash ai-code--repo-context-info)
+        (message "Cleared all stored context info."))
+    (let ((repo-root (or (magit-toplevel)
+                         (user-error "Not inside a Git repository"))))
+      (if (gethash repo-root ai-code--repo-context-info)
+          (progn
+            (remhash repo-root ai-code--repo-context-info)
+            (message "Cleared context info for %s." repo-root))
+        (message "No context info stored for %s." repo-root)))))
+
+  ;; 2. 将该上下文列表整合进提交/提问等流程，让已存上下文自动注入
+
 (provide 'ai-code-file)
 
 ;;; ai-code-file.el ends here 
