@@ -32,6 +32,53 @@ ignoring leading whitespace."
                               "+")
                       (string-trim-left line)))))
 
+(defun ai-code--get-function-name-for-comment ()
+  "Get the appropriate function name when cursor is on a comment line.
+If the comment precedes a function definition or is inside a function body,
+returns that function's name. Otherwise returns the result of `which-function`."
+  (interactive)
+  (let* ((current-func (which-function))
+         (resolved-func
+          (save-excursion
+            ;; Move to next non-comment, non-blank line
+            (forward-line 1)
+            (while (and (not (eobp))
+                        (or (looking-at-p "^[ \t]*$")
+                            (ai-code--is-comment-line
+                             (buffer-substring-no-properties
+                              (line-beginning-position)
+                              (line-end-position)))))
+              (forward-line 1))
+            ;; Get function name at this position, trying a short lookahead inside
+            ;; the function body when `which-function` cannot resolve the def line.
+            (unless (eobp)
+              (let ((lookahead 5)
+                    (next-func (which-function)))
+                (while (and (> lookahead 0)
+                            (or (null next-func)
+                                (string= next-func current-func)))
+                  (forward-line 1)
+                  (setq lookahead (1- lookahead))
+                  (unless (or (eobp)
+                              (looking-at-p "^[ \t]*$")
+                              (ai-code--is-comment-line
+                               (buffer-substring-no-properties
+                                (line-beginning-position)
+                                (line-end-position))))
+                    (setq next-func (which-function))))
+                (cond
+                 ;; No current function, use the next if found.
+                 ((not current-func) next-func)
+                 ;; No next function, keep the current context.
+                 ((not next-func) current-func)
+                 ;; Prefer the forward definition when it differs from current.
+                 ((not (string= next-func current-func)) next-func)
+                 ;; Otherwise fall back to current.
+                 (t current-func)))))))
+    ;; (when resolved-func
+    ;;   (message "Identified function: %s" resolved-func))
+    resolved-func))
+
 ;;;###autoload
 (defun ai-code-code-change (arg)
   "Generate prompt to change code under cursor or in selected region.
@@ -100,7 +147,9 @@ Argument ARG is the prefix argument."
     (let* ((current-line (string-trim (thing-at-point 'line t)))
            (current-line-number (line-number-at-pos (point)))
            (is-comment (ai-code--is-comment-line current-line))
-           (function-name (which-function))
+           (function-name (if is-comment
+                              (ai-code--get-function-name-for-comment)
+                            (which-function)))
            (function-context (if function-name
                                  (format "\nFunction: %s" function-name)
                                ""))

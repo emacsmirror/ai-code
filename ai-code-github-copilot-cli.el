@@ -18,7 +18,6 @@
 (declare-function claude-code-switch-to-buffer "claude-code" (&optional arg))
 (declare-function claude-code--start "claude-code" (arg extra-switches &optional force-prompt force-switch-to-buffer))
 (declare-function claude-code--term-send-string "claude-code" (backend string))
-(declare-function ai-code--claude-code-send-command-impl "ai-code-backends" (cmd))
 
 
 (defgroup ai-code-github-copilot-cli nil
@@ -50,7 +49,7 @@
 When called interactively, prompts for the command.
 When called from Lisp code, sends LINE directly without prompting."
   (interactive "sCopilot> ")
-  (ai-code--claude-code-send-command-impl line))
+  (claude-code--do-send-command line))
 
 ;;;###autoload
 (defun github-copilot-cli-resume (&optional arg)

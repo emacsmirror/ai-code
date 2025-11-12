@@ -27,25 +27,6 @@
   (interactive "P")
   (ai-code--unsupported-resume arg))
 
-(defun ai-code--claude-code-send-command-impl (cmd)
-  "Send CMD to claude-code terminal backend programmatically.
-This function bypasses the interactive prompt in `claude-code-send-command'
-and directly sends the command to the terminal.  It first attempts to use
-`claude-code--do-send-command' if available, otherwise falls back to
-`claude-code--term-send-string'."
-  (cond
-   ;; Try the newer claude-code--do-send-command if available (returns selected-buffer)
-   ((and (fboundp 'claude-code--do-send-command)
-         (boundp 'claude-code-terminal-backend))
-    (claude-code--do-send-command cmd))
-   ;; Fall back to older claude-code--term-send-string
-   ((and (fboundp 'claude-code--term-send-string)
-         (boundp 'claude-code-terminal-backend))
-    (claude-code--term-send-string claude-code-terminal-backend
-                                   (concat cmd "\n")))
-   (t
-    (error "claude-code backend functions not available"))))
-
 ;;;###autoload
 (defun ai-code-claude-code-send-command (cmd)
   "Send CMD to claude-code programmatically or interactively.
@@ -54,7 +35,7 @@ which no longer accepts a command parameter.
 When called interactively, prompts for the command.
 When called from Lisp code, sends CMD directly without prompting."
   (interactive "sClaude command: ")
-  (ai-code--claude-code-send-command-impl cmd))
+  (claude-code--do-send-command cmd))
 
 ;;;###autoload
 (defcustom ai-code-backends
