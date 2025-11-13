@@ -169,13 +169,19 @@ Argument ARG is the prefix argument."
          (context-section
           (if full-buffer-context
               (concat "\n\nContext:\n" full-buffer-context)
-            (concat
-             (when clipboard-content
-               (concat "\n\nClipboard context (error/exception):\n" clipboard-content))
-             (when compilation-content
-               (concat "\n\nCompilation output:\n" compilation-content))
-             (when (and region-text (not compilation-content) (not clipboard-content))
-               (concat "\n\nSelected code:\n" region-text)))))
+            (let ((context-blocks nil))
+              (when clipboard-content
+                (push (concat "Clipboard context (error/exception):\n" clipboard-content)
+                      context-blocks))
+              (when compilation-content
+                (push (concat "Compilation output:\n" compilation-content)
+                      context-blocks))
+              (when region-text
+                (push (concat "Selected code:\n" region-text)
+                      context-blocks))
+              (when context-blocks
+                (concat "\n\nContext:\n"
+                        (mapconcat #'identity (nreverse context-blocks) "\n\n"))))))
          (default-question "How to fix the error in this code? Please analyze the error, explain the root cause, and provide the corrected code to resolve the issue: ")
          (prompt-label
           (cond
