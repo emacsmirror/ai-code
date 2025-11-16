@@ -17,6 +17,7 @@
 (declare-function ai-code-read-string "ai-code-input")
 (declare-function ai-code--insert-prompt "ai-code-prompt-mode")
 (declare-function ai-code--get-clipboard-text "ai-code-interface")
+(declare-function ai-code-call-gptel-sync "ai-code-prompt-mode")
 
 ;;;###autoload
 (defun ai-code-ask-question (arg)
@@ -90,6 +91,14 @@ CLIPBOARD-CONTEXT is optional clipboard text to append as context."
          (region-active (region-active-p))
          (region-text (when region-active
                         (buffer-substring-no-properties (region-beginning) (region-end))))
+         (region-start-line (when region-active
+                             (line-number-at-pos (region-beginning))))
+         (region-end-line (when region-active
+                           (line-number-at-pos (region-end))))
+         (git-relative-path (when (and region-active buffer-file-name)
+                             (car (ai-code--get-git-relative-paths (list buffer-file-name)))))
+         (region-location-info (when (and region-active git-relative-path region-start-line region-end-line)
+                                (format "%s#L%d-L%d" git-relative-path region-start-line region-end-line)))
          (prompt-label
           (cond
            ((and clipboard-context
@@ -118,14 +127,19 @@ CLIPBOARD-CONTEXT is optional clipboard text to append as context."
          (final-prompt
           (concat question
                   (when region-text
-                    (concat "\n" region-text))
+                    (concat "\nSelected region:\n"
+                            (when region-location-info
+                              (concat region-location-info "\n"))
+                            region-text))
                   (when function-name
                     (format "\nFunction: %s" function-name))
                   files-context-string
                   (when (and clipboard-context
                             (string-match-p "\\S-" clipboard-context))
                     (concat "\n\nClipboard context:\n" clipboard-context))
-                  "\nNote: This is a question only - please do not modify the code.")))
+                  (if region-text
+                      "\nNote: This is a question about the selected region - please do not modify the code."
+                    "\nNote: This is a question only - please do not modify the code."))))
     (ai-code--insert-prompt final-prompt)))
 
 (defun ai-code--get-git-relative-paths (file-paths)
@@ -324,7 +338,6 @@ Explain what this function does, its parameters, return value, algorithm, and it
       (when final-prompt
         (ai-code--insert-prompt final-prompt)))))
 
-
 (defun ai-code--explain-file ()
   "Explain the current file."
   (let ((file-name (or buffer-file-name "current buffer")))
@@ -333,6 +346,85 @@ Explain what this function does, its parameters, return value, algorithm, and it
            (final-prompt (ai-code-read-string "Prompt: " initial-prompt)))
       (when final-prompt
         (ai-code--insert-prompt final-prompt)))))
+
+;;;###autoload
+(defcustom ai-code-notes-file-name ".ai.code.notes.org"
+  "Default note file name relative to the project root.
+This value is used by `ai-code-take-notes' when suggesting where to store notes."
+  :type 'string
+  :group 'ai-code)
+
+;;;###autoload
+(defcustom ai-code-notes-use-gptel-headline nil
+  "Whether to use GPTel to generate headline for notes.
+If non-nil, call `ai-code-call-gptel-sync` to generate a smart default
+headline based on the selected content. Otherwise, prompt with empty default."
+  :type 'boolean
+  :group 'ai-code)
+
+;;;###autoload
+(defun ai-code-take-notes ()
+  "Take notes from selected region and save to a note file.
+When there is a selected region, ask for note file path (default is
+.ai.code.notes.org in the git root) and section title.  Add the section
+title as a headline at the end of the note file, and put the selected
+region as content of that section."
+  (interactive)
+  (unless (region-active-p)
+    (user-error "No region selected. Please select the text you want to save as notes"))
+  (let* ((region-text (filter-buffer-substring (region-beginning) (region-end) nil))
+         (git-root (condition-case nil
+                       (magit-toplevel)
+                     (error nil)))
+         (default-note-file (if git-root
+                                (expand-file-name ai-code-notes-file-name git-root)
+                              (expand-file-name ai-code-notes-file-name default-directory)))
+         (note-file (read-file-name
+                     "Note file: "
+                     (file-name-directory default-note-file)
+                     default-note-file
+                     nil
+                     (file-name-nondirectory default-note-file)))
+         (default-title (when ai-code-notes-use-gptel-headline
+                          (condition-case err
+                              (string-trim
+                               (ai-code-call-gptel-sync
+                                (format "Generate a concise headline (max 10 words) for this note content. Only return the headline text without quotes or extra formatting:\n\n%s"
+                                        (if (> (length region-text) 500)
+                                            (substring region-text 0 500)
+                                          region-text))))
+                            (error
+                             (message "GPTel headline generation failed: %s" (error-message-string err))
+                             ""))))
+         (section-title (ai-code-read-string "Section title: " (or default-title ""))))
+    (when (string-empty-p section-title)
+      (user-error "Section title cannot be empty"))
+    ;; Create note file directory if it doesn't exist
+    (let ((note-dir (file-name-directory note-file)))
+      (unless (file-exists-p note-dir)
+        (make-directory note-dir t)))
+    ;; Append section to note file
+    (with-current-buffer (find-file-noselect note-file)
+      (save-excursion
+        (goto-char (point-max))
+        ;; Add newline before new section if file is not empty
+        (unless (bobp)
+          (insert "\n\n"))
+        ;; Insert headline
+        (insert "* " section-title "\n")
+        ;; Insert timestamp
+        (org-insert-time-stamp (current-time) t nil)
+        (insert "\n\n")
+        ;; Insert region content
+        (insert region-text)
+        (insert "\n"))
+      (save-buffer))
+    ;; Open note file in other window and scroll to bottom
+    (let ((note-buffer (find-file-other-window note-file)))
+      (with-selected-window (get-buffer-window note-buffer)
+        (goto-char (point-max))
+        (recenter -1)))
+    (message "Notes added to %s under section: %s" note-file section-title)))
 
 (provide 'ai-code-discussion)
 
