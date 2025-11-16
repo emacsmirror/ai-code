@@ -158,6 +158,7 @@ Shows the current backend label to the right."
     ("q" "Ask question (C-u: clipboard)" ai-code-ask-question)
     ("x" "Explain code" ai-code-explain)
     ("<SPC>" "Send command (C-u: clipboard)" ai-code-send-command)
+    ("@" "Update context for AI" ai-code-context-action)
     ]
    ["AI Agile Development"
     ("r" "Refactor Code"               ai-code-refactor-book-method)

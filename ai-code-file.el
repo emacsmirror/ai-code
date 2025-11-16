@@ -324,13 +324,13 @@ When a region is active, use the file path with line range in the form filepath:
                      (end (region-end))
                      (start-line (line-number-at-pos (min start end)))
                      (end-line (line-number-at-pos (max start end))))
-                (format "%s:L%d-%d" buffer-file-name start-line end-line))
+                (format "%s#L%d-L%d" buffer-file-name start-line end-line))
             (let ((function-name (when (fboundp 'which-function)
                                    (which-function))))
               (if (and function-name
                        (stringp function-name)
                        (not (string-empty-p function-name)))
-                  (format "%s:%s" buffer-file-name function-name)
+                  (format "%s#%s" buffer-file-name function-name)
                 buffer-file-name)))))
     (let ((current (gethash repo-root ai-code--repo-context-info)))
       (unless (member context current)
@@ -378,7 +378,16 @@ With prefix ARG, clear all repositories."
             (message "Cleared context info for %s." repo-root))
         (message "No context info stored for %s." repo-root)))))
 
-  ;; 2. 将该上下文列表整合进提交/提问等流程，让已存上下文自动注入
+(defun ai-code-context-action ()
+  "Prompt for context action and invoke the corresponding command."
+  (interactive)
+  (let* ((actions '(("list" . ai-code-list-context)
+                    ("add" . ai-code-add-context)
+                    ("clear" . ai-code-clear-context)))
+         (choice (completing-read "Context action: "
+                                  (mapcar #'car actions)
+                                  nil t)))
+    (call-interactively (cdr (assoc choice actions)))))
 
 (provide 'ai-code-file)
 
