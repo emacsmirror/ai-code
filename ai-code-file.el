@@ -319,7 +319,7 @@ Call `ai-code-shell-cmd` when in dired mode, shell modes or a region is active; 
 (defun ai-code-add-context ()
   "Capture current buffer context and store it per Git repository.
 When no region is selected, use the full file path and current function (if any).
-When a region is active, use the file path with line range in the form filepath:Lstart-end."
+When a region is active, use the file path with line range in the form filepath#Lstart-Lend."
   (interactive)
   (let ((repo-root (or (magit-toplevel)
                        (user-error "Not inside a Git repository"))))
