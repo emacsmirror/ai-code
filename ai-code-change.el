@@ -22,6 +22,7 @@
 (declare-function ai-code--get-clipboard-text "ai-code-interface")
 (declare-function ai-code--get-git-relative-paths "ai-code-discussion")
 (declare-function ai-code--get-region-location-info "ai-code-discussion")
+(declare-function ai-code--format-repo-context-info "ai-code-file")
 
 (defun ai-code--is-comment-line (line)
   "Check if LINE is a comment line based on current buffer's comment syntax.
@@ -121,6 +122,7 @@ Argument ARG is the prefix argument."
            (t "Change code: ")))
          (initial-prompt (ai-code-read-string prompt-label ""))
          (files-context-string (ai-code--get-context-files-string))
+         (repo-context-string (ai-code--format-repo-context-info))
          (final-prompt
           (concat initial-prompt
                   (when region-text
@@ -133,6 +135,7 @@ Argument ARG is the prefix argument."
                             region-text))
                   (when function-name (format "\nFunction: %s" function-name))
                   files-context-string
+                  repo-context-string
                   (when (and clipboard-context
                             (string-match-p "\\S-" clipboard-context))
                     (concat "\n\nClipboard context:\n" clipboard-context))
