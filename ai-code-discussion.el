@@ -195,6 +195,7 @@ Argument ARG is the prefix argument."
                                 (buffer-substring-no-properties (point-min) (point-max))))
          (function-name (which-function))
          (files-context-string (ai-code--get-context-files-string))
+         (repo-context-string (ai-code--format-repo-context-info))
          (context-section
           (if full-buffer-context
               (concat "\n\nContext:\n" full-buffer-context)
