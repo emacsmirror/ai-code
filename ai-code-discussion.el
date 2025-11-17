@@ -232,10 +232,10 @@ Argument ARG is the prefix argument."
          (final-prompt
           (concat initial-prompt
                   context-section
-                 (when function-name (format "\nFunction: %s" function-name))
-                 files-context-string
-                 repo-context-string
-                 (concat "\n\nNote: Please focus on how to fix the error. Your response should include:\n"
+                  (when function-name (format "\nFunction: %s" function-name))
+                  files-context-string
+                  repo-context-string
+                  (concat "\n\nNote: Please focus on how to fix the error. Your response should include:\n"
                           "1. A brief explanation of the root cause of the error.\n"
                           "2. A code snippet with the fix.\n"
                           "3. An explanation of how the fix addresses the error."))))
