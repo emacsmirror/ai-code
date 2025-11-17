@@ -75,12 +75,14 @@ CLIPBOARD-CONTEXT is optional clipboard text to append as context."
                         (file-at-point (format "Question about %s: " (file-name-nondirectory file-at-point)))
                         (t "General question about directory: ")))
          (question (ai-code-read-string prompt-label ""))
+         (repo-context-string (ai-code--format-repo-context-info))
          (final-prompt (concat question
-                              files-context-string
-                              (when (and clipboard-context
-                                        (string-match-p "\\S-" clipboard-context))
-                                (concat "\n\nClipboard context:\n" clipboard-context))
-                              "\nNote: This is a question only - please do not modify the code.")))
+                               files-context-string
+                               repo-context-string
+                               (when (and clipboard-context
+                                          (string-match-p "\\S-" clipboard-context))
+                                 (concat "\n\nClipboard context:\n" clipboard-context))
+                               "\nNote: This is a question only - please do not modify the code.")))
     (ai-code--insert-prompt final-prompt)))
 
 (defun ai-code--ask-question-file (clipboard-context)
