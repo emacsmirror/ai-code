@@ -308,35 +308,57 @@ Call `ai-code-shell-cmd` when in dired mode, shell modes or a region is active; 
 (defvar ai-code--repo-context-info (make-hash-table :test #'equal)
   "Hash table storing context info lists per Git repository root.")
 
+(defun ai-code--store-context-entry (repo-root context)
+  "Store CONTEXT string for REPO-ROOT in `ai-code--repo-context-info'."
+  (let ((current (gethash repo-root ai-code--repo-context-info)))
+    (unless (member context current)
+      (setq current (cons context current)))
+    (puthash repo-root current ai-code--repo-context-info)))
+
 ;;;###autoload
 (defun ai-code-add-context ()
   "Capture current buffer context and store it per Git repository.
 When no region is selected, use the full file path and current function (if any).
 When a region is active, use the file path with line range in the form filepath:Lstart-end."
   (interactive)
-  (unless buffer-file-name
-    (user-error "Current buffer is not visiting a file"))
-  (let* ((repo-root (or (magit-toplevel)
-                        (user-error "Not inside a Git repository")))
-         (context
-          (if (use-region-p)
-              (let* ((start (region-beginning))
-                     (end (region-end))
-                     (start-line (line-number-at-pos (min start end)))
-                     (end-line (line-number-at-pos (max start end))))
-                (format "%s#L%d-L%d" buffer-file-name start-line end-line))
-            (let ((function-name (when (fboundp 'which-function)
-                                   (which-function))))
-              (if (and function-name
-                       (stringp function-name)
-                       (not (string-empty-p function-name)))
-                  (format "%s#%s" buffer-file-name function-name)
-                buffer-file-name)))))
-    (let ((current (gethash repo-root ai-code--repo-context-info)))
-      (unless (member context current)
-        (setq current (cons context current)))
-      (puthash repo-root current ai-code--repo-context-info)
-      (message "Added context for %s: %s" repo-root context))))
+  (let ((repo-root (or (magit-toplevel)
+                       (user-error "Not inside a Git repository"))))
+    (if (eq major-mode 'dired-mode)
+        (let* ((all-marked (dired-get-marked-files))
+               (file-at-point (dired-get-filename nil t))
+               (has-marks (and all-marked
+                               (not (and (= (length all-marked) 1)
+                                         file-at-point
+                                         (equal (car all-marked) file-at-point)))))
+               (targets (cond
+                         (has-marks all-marked)
+                         (file-at-point (list file-at-point))
+                         (t nil))))
+          (unless targets
+            (user-error "No file or directory selected in Dired"))
+          (dolist (path targets)
+            (ai-code--store-context-entry repo-root path))
+          (message "Added context for %s: %s"
+                   repo-root
+                   (mapconcat #'identity targets ", ")))
+      (unless buffer-file-name
+        (user-error "Current buffer is not visiting a file"))
+      (let ((context
+             (if (use-region-p)
+                 (let* ((start (region-beginning))
+                        (end (region-end))
+                        (start-line (line-number-at-pos (min start end)))
+                        (end-line (line-number-at-pos (max start end))))
+                   (format "%s#L%d-L%d" buffer-file-name start-line end-line))
+               (let ((function-name (when (fboundp 'which-function)
+                                      (which-function))))
+                 (if (and function-name
+                          (stringp function-name)
+                          (not (string-empty-p function-name)))
+                     (format "%s#%s" buffer-file-name function-name)
+                   buffer-file-name)))))
+        (ai-code--store-context-entry repo-root context)
+        (message "Added context for %s: %s" repo-root context)))))
 
 (defun ai-code-list-context ()
   "Display stored context entries grouped by Git repository."
@@ -388,6 +410,23 @@ With prefix ARG, clear all repositories."
                                   (mapcar #'car actions)
                                   nil t)))
     (call-interactively (cdr (assoc choice actions)))))
+
+(defun ai-code--format-repo-context-info ()
+  "Return formatted repository context string or nil.
+Includes stored context entries for the current Git repository if available."
+  (when (and (boundp 'ai-code--repo-context-info)
+             ai-code--repo-context-info)
+    (let ((repo-root (condition-case nil
+                         (magit-toplevel)
+                       (error nil))))
+      (when repo-root
+        (let ((entries (gethash repo-root ai-code--repo-context-info)))
+          (when entries
+            (concat "\nStored repository context:\n"
+                    (mapconcat (lambda (ctx)
+                                 (concat "  - " ctx))
+                               (reverse entries)
+                               "\n"))))))))
 
 (provide 'ai-code-file)
 

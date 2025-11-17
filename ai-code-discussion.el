@@ -18,6 +18,10 @@
 (declare-function ai-code--insert-prompt "ai-code-prompt-mode")
 (declare-function ai-code--get-clipboard-text "ai-code-interface")
 (declare-function ai-code-call-gptel-sync "ai-code-prompt-mode")
+(declare-function magit-toplevel "magit" (&optional dir))
+(declare-function ai-code--format-repo-context-info "ai-code-file")
+
+(defvar ai-code--repo-context-info)
 
 ;;;###autoload
 (defun ai-code-ask-question (arg)
@@ -118,6 +122,7 @@ CLIPBOARD-CONTEXT is optional clipboard text to append as context."
            (t "General question: ")))
          (question (ai-code-read-string prompt-label ""))
          (files-context-string (ai-code--get-context-files-string))
+         (repo-context-string (ai-code--format-repo-context-info))
          (final-prompt
           (concat question
                   (when region-text
@@ -128,8 +133,9 @@ CLIPBOARD-CONTEXT is optional clipboard text to append as context."
                   (when function-name
                     (format "\nFunction: %s" function-name))
                   files-context-string
+                  repo-context-string
                   (when (and clipboard-context
-                            (string-match-p "\\S-" clipboard-context))
+                             (string-match-p "\\S-" clipboard-context))
                     (concat "\n\nClipboard context:\n" clipboard-context))
                   (if region-text
                       "\nNote: This is a question about the selected region - please do not modify the code."
@@ -223,9 +229,10 @@ Argument ARG is the prefix argument."
          (final-prompt
           (concat initial-prompt
                   context-section
-                  (when function-name (format "\nFunction: %s" function-name))
-                  files-context-string
-                  (concat "\n\nNote: Please focus on how to fix the error. Your response should include:\n"
+                 (when function-name (format "\nFunction: %s" function-name))
+                 files-context-string
+                 repo-context-string
+                 (concat "\n\nNote: Please focus on how to fix the error. Your response should include:\n"
                           "1. A brief explanation of the root cause of the error.\n"
                           "2. A code snippet with the fix.\n"
                           "3. An explanation of how the fix addresses the error."))))
