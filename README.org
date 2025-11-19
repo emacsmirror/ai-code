@@ -99,7 +99,13 @@ An Emacs interface for AI-assisted software development. *The purpose is to prov
 ** FAQ
 
 - Q: Using OpenCode as backend, it might have performance issues with eat.el in Doom Emacs. [[https://github.com/tninja/ai-code-interface.el/issues/9#issuecomment-3543277108][Issue]]
-- A: Use vterm as backend, opencode won't trigger mouse hover and will not cause emacs flickering.
+- A: Use vterm as backend, opencode won't trigger mouse hover and will not cause emacs flickering. Set "theme" to system in openocde config can reduce glitches. From [[https://github.com/tninja/ai-code-interface.el/issues/9#issuecomment-3543335121][gkzhb's answer]]:
+#+begin_src json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": "system"
+} 
+#+end_src
 
 ** Related emacs packages
 - Claude Code (`[[https://github.com/stevemolitor/claude-code.el][claude-code.el]]`)
