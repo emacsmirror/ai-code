@@ -26,6 +26,7 @@
 (require 'ai-code-discussion)
 (require 'ai-code-codex-cli)
 (require 'ai-code-github-copilot-cli)
+(require 'ai-code-opencode)
 (require 'ai-code-file)
 (require 'ai-code-ai)
 
@@ -158,7 +159,7 @@ Shows the current backend label to the right."
     ("q" "Ask question (C-u: clipboard)" ai-code-ask-question)
     ("x" "Explain code" ai-code-explain)
     ("<SPC>" "Send command (C-u: clipboard)" ai-code-send-command)
-    ("@" "Update context for AI" ai-code-context-action)
+    ("@" "Add context (C-u: clear)" ai-code-context-action)
     ]
    ["AI Agile Development"
     ("r" "Refactor Code"               ai-code-refactor-book-method)

@@ -365,23 +365,18 @@ When a region is active, use the file path with line range in the form filepath#
   (interactive)
   (if (= (hash-table-count ai-code--repo-context-info) 0)
       (message "No stored context info.")
-    (with-current-buffer (get-buffer-create "*ai-code-context*")
-      (let ((inhibit-read-only t))
-        (read-only-mode -1)
-        (erase-buffer)
-        (insert "Stored AI Code contexts:\n\n")
-        (maphash
-         (lambda (repo contexts)
-           (insert (format "Repo: %s\n" repo))
-           (if contexts
-               (dolist (ctx (reverse contexts))
-                 (insert (format "  - %s\n" ctx)))
-             (insert "  (no entries)\n"))
-           (insert "\n"))
-         ai-code--repo-context-info)
-        (goto-char (point-min))
-        (read-only-mode 1)
-        (display-buffer (current-buffer))))))
+    (let ((sections '()))
+      (maphash
+       (lambda (repo contexts)
+         (let ((entries (if contexts
+                            (mapconcat (lambda (ctx)
+                                         (concat "  - " ctx))
+                                       (reverse contexts)
+                                       "\n")
+                          "  (no entries)")))
+           (push (format "Repo: %s\n%s" repo entries) sections)))
+       ai-code--repo-context-info)
+      (message "%s" (string-join (nreverse sections) "\n\n")))))
 
 (defun ai-code-clear-context (&optional arg)
   "Clear stored context entries.
@@ -400,16 +395,16 @@ With prefix ARG, clear all repositories."
             (message "Cleared context info for %s." repo-root))
         (message "No context info stored for %s." repo-root)))))
 
-(defun ai-code-context-action ()
-  "Prompt for context action and invoke the corresponding command."
-  (interactive)
-  (let* ((actions '(("list" . ai-code-list-context)
-                    ("add" . ai-code-add-context)
-                    ("clear" . ai-code-clear-context)))
-         (choice (completing-read "Context action: "
-                                  (mapcar #'car actions)
-                                  nil t)))
-    (call-interactively (cdr (assoc choice actions)))))
+(defun ai-code-context-action (arg)
+  "Add or clear context entries depending on ARG.
+Without prefix ARG, add context and immediately list all stored entries.
+With prefix ARG (C-u), clear context; clearing the current repo or all repos
+is delegated to `ai-code-clear-context'."
+  (interactive "P")
+  (if arg
+      (call-interactively #'ai-code-clear-context)
+    (call-interactively #'ai-code-add-context)
+    (ai-code-list-context)))
 
 (defun ai-code--format-repo-context-info ()
   "Return formatted repository context string or nil.

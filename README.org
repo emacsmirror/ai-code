@@ -7,6 +7,7 @@ An Emacs interface for AI-assisted software development. *The purpose is to prov
   - [[https://github.com/google-gemini/gemini-cli][Gemini CLI]]
   - [[https://github.com/openai/codex][OpenAI Codex]]
   - [[https://docs.github.com/en/copilot/how-tos/use-copilot-agents/use-copilot-cli][GitHub Copilot CLI]]
+  - [[https://opencode.ai/][Opencode]]
 
 - I switch across different CLI based AI tool in emacs: Claude Code / Gemini CLI / Aider / OpenAI Codex. If you also use different AI tools inside emacs, but want to keep same user interface and experience, this package is for you.
 
@@ -32,6 +33,24 @@ An Emacs interface for AI-assisted software development. *The purpose is to prov
       (ai-code-magit-setup-transients)))
 #+end_src
 
+** Dependencies
+
+*** Required Dependencies
+- Emacs 26.1 or later
+- `org`: Org-mode support
+- `magit`: Git integration
+- `transient`: For the menu system
+- Claude Code (`[[https://github.com/stevemolitor/claude-code.el][claude-code.el]]`)
+  - eat / vterm need to be installed to support various AI coding CLI backends.
+
+*** Optional Dependencies
+- `helm`: For an enhanced auto-completion experience (`ai-code-input.el`).
+- `yasnippet`: For snippet support in the prompt file. A library of snippets is included.
+- `gptel`: For intelligent, AI-generated headlines in the prompt file.
+- `flycheck`: To enable the `ai-code-flycheck-fix-errors-in-scope` command.
+- `projectile`: For project root initialization.
+- `helm-gtags`: For tags creation.
+
 ** Usage
 
 *** Backend Configuration
@@ -47,6 +66,7 @@ An Emacs interface for AI-assisted software development. *The purpose is to prov
    - Gemini CLI (`[[https://github.com/linchen2chris/gemini-cli.el][gemini-cli.el]]`)
    - [[https://github.com/openai/codex][OpenAI codex CLI]] (`[[./ai-code-codex-cli.el][ai-code-codex-cli.el]]`)
    - [[https://docs.github.com/en/copilot/how-tos/use-copilot-agents/use-copilot-cli][GitHub Copilot CLI]] (`[[./ai-code-github-copilot-cli.el][ai-code-github-copilot-cli.el]]`)
+   - [[https://opencode.ai/][Opencode]] (`[[./ai-code-opencode.el][ai-code-opencode.el]]`)
 
    You can add other backends by customizing the `ai-code-backends` variable.
 
@@ -76,22 +96,16 @@ An Emacs interface for AI-assisted software development. *The purpose is to prov
 
 ** [[https://github.com/tninja/aider.el/blob/main/appendix.org#be-careful-about-ai-generated-code][Why Agile development with AI?]]
 
-** Dependencies
+** FAQ
 
-*** Required Dependencies
-- Emacs 26.1 or later
-- `org`: Org-mode support
-- `magit`: Git integration
-- `transient`: For the menu system
-- Claude Code (`[[https://github.com/stevemolitor/claude-code.el][claude-code.el]]`)
-
-*** Optional Dependencies
-- `helm`: For an enhanced auto-completion experience (`ai-code-input.el`).
-- `yasnippet`: For snippet support in the prompt file. A library of snippets is included.
-- `gptel`: For intelligent, AI-generated headlines in the prompt file.
-- `flycheck`: To enable the `ai-code-flycheck-fix-errors-in-scope` command.
-- `projectile`: For project root initialization.
-- `helm-gtags`: For tags creation.
+- Q: Using OpenCode as backend, it might have performance issues with eat.el in Doom Emacs. [[https://github.com/tninja/ai-code-interface.el/issues/9#issuecomment-3543277108][Issue]]
+- A: Use vterm as backend, opencode won't trigger mouse hover and will not cause emacs flickering. Set "theme" to system in openocde config can reduce glitches. From [[https://github.com/tninja/ai-code-interface.el/issues/9#issuecomment-3543335121][gkzhb's answer]]:
+#+begin_src json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": "system"
+} 
+#+end_src
 
 ** Related emacs packages
 - Claude Code (`[[https://github.com/stevemolitor/claude-code.el][claude-code.el]]`)
