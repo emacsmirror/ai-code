@@ -489,7 +489,7 @@ If TDD-MODE is non-nil, adds TDD constraints to the instruction."
                                    prompt-with-params))
          ;; Add TDD constraint if in TDD mode
          (tdd-constraint (if tdd-mode " Ensure all tests still pass after refactoring." ""))
-         (initial-instruction (concat base-instruction tdd-constraint))
+         (initial-instruction (concat base-instruction tdd-constraint ". Go ahead and make the code change."))
          (final-instruction (ai-code-read-string "Edit refactoring instruction: " initial-instruction))
          ;; Add file information to context
          (file-info (ai-code--get-context-files-string))
