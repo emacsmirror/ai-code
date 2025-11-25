@@ -197,6 +197,143 @@ is between the function definition and its body."
       ;; Since we are in temp buffer with no major mode, indentation might be 0.
       (should (looking-at-p "; TODO: my task")))))
 
+(ert-deftest test-ai-code-implement-todo-done-line-toggle ()
+  "Test ai-code-implement-todo toggles DONE to TODO when toggle action is selected."
+  (with-temp-buffer
+    (setq buffer-file-name "test.el")
+    (setq-local comment-start ";")
+    (setq-local comment-end "")
+    (insert "Line 1\n;; DONE: completed task\nLine 3")
+    (goto-char (point-min))
+    (forward-line 1) ;; On the DONE line
+    
+    ;; Mock completing-read to return "Toggle to TODO"
+    (cl-letf (((symbol-function 'completing-read) (lambda (&rest _) "Toggle to TODO"))
+              ((symbol-function 'region-active-p) (lambda () nil)))
+      
+      (let ((result (ai-code--implement-todo--handle-done-line)))
+        ;; Should return t indicating the action was handled
+        (should result)
+        ;; Check the line was toggled
+        (goto-char (point-min))
+        (forward-line 1)
+        (should (looking-at-p ";; TODO: completed task"))))))
+
+(ert-deftest test-ai-code-implement-todo-done-line-delete ()
+  "Test ai-code-implement-todo deletes DONE line when delete action is selected."
+  (with-temp-buffer
+    (setq buffer-file-name "test.el")
+    (setq-local comment-start ";")
+    (setq-local comment-end "")
+    (insert "Line 1\n;; DONE: completed task\nLine 3")
+    (goto-char (point-min))
+    (forward-line 1) ;; On the DONE line
+    
+    ;; Mock completing-read to return "Delete comment line"
+    (cl-letf (((symbol-function 'completing-read) (lambda (&rest _) "Delete comment line"))
+              ((symbol-function 'region-active-p) (lambda () nil)))
+      
+      (let ((result (ai-code--implement-todo--handle-done-line)))
+        ;; Should return t indicating the action was handled
+        (should result)
+        ;; Check the DONE line was deleted - buffer should now be "Line 1\nLine 3"
+        (goto-char (point-min))
+        (should (looking-at-p "Line 1\nLine 3"))))))
+
+(ert-deftest test-ai-code-implement-todo-done-line-keep ()
+  "Test ai-code-implement-todo keeps DONE line when keep action is selected."
+  (with-temp-buffer
+    (setq buffer-file-name "test.el")
+    (setq-local comment-start ";")
+    (setq-local comment-end "")
+    (insert "Line 1\n;; DONE: completed task\nLine 3")
+    (goto-char (point-min))
+    (forward-line 1) ;; On the DONE line
+    
+    ;; Mock completing-read to return "Keep as DONE"
+    (cl-letf (((symbol-function 'completing-read) (lambda (&rest _) "Keep as DONE"))
+              ((symbol-function 'region-active-p) (lambda () nil)))
+      
+      (let ((result (ai-code--implement-todo--handle-done-line)))
+        ;; Should return t indicating the action was handled
+        (should result)
+        ;; Check the line is unchanged
+        (goto-char (point-min))
+        (forward-line 1)
+        (should (looking-at-p ";; DONE: completed task"))))))
+
+(ert-deftest test-ai-code-implement-todo-done-line-not-detected-on-non-done ()
+  "Test ai-code--implement-todo--handle-done-line returns nil for non-DONE lines."
+  (with-temp-buffer
+    (setq-local comment-start ";")
+    (setq-local comment-end "")
+    (insert ";; TODO: a task\n")
+    (goto-char (point-min))
+    
+    (cl-letf (((symbol-function 'region-active-p) (lambda () nil)))
+      (let ((result (ai-code--implement-todo--handle-done-line)))
+        ;; Should return nil as the line is not a DONE line
+        (should-not result)))))
+
+(ert-deftest test-ai-code-implement-todo-done-line-not-detected-with-region ()
+  "Test ai-code--implement-todo--handle-done-line returns nil when region is active."
+  (with-temp-buffer
+    (setq-local comment-start ";")
+    (setq-local comment-end "")
+    (insert ";; DONE: completed task\n")
+    (goto-char (point-min))
+    
+    ;; Mock region-active-p to return t
+    (cl-letf (((symbol-function 'region-active-p) (lambda () t)))
+      (let ((result (ai-code--implement-todo--handle-done-line)))
+        ;; Should return nil as region is active
+        (should-not result)))))
+
+(ert-deftest test-ai-code-implement-todo-done-line-with-different-comment-styles ()
+  "Test DONE line detection works with different comment styles."
+  ;; Test with hash comment (Python/Ruby style)
+  (with-temp-buffer
+    (setq-local comment-start "# ")
+    (setq-local comment-end "")
+    (insert "# DONE: python task\n")
+    (goto-char (point-min))
+    
+    (cl-letf (((symbol-function 'completing-read) (lambda (&rest _) "Toggle to TODO"))
+              ((symbol-function 'region-active-p) (lambda () nil)))
+      (let ((result (ai-code--implement-todo--handle-done-line)))
+        (should result)
+        (goto-char (point-min))
+        (should (looking-at-p "# TODO: python task")))))
+  
+  ;; Test with double slash comment (C/Java style)
+  (with-temp-buffer
+    (setq-local comment-start "// ")
+    (setq-local comment-end "")
+    (insert "// DONE: java task\n")
+    (goto-char (point-min))
+    
+    (cl-letf (((symbol-function 'completing-read) (lambda (&rest _) "Toggle to TODO"))
+              ((symbol-function 'region-active-p) (lambda () nil)))
+      (let ((result (ai-code--implement-todo--handle-done-line)))
+        (should result)
+        (goto-char (point-min))
+        (should (looking-at-p "// TODO: java task"))))))
+
+(ert-deftest test-ai-code-implement-todo-done-line-with-indentation ()
+  "Test DONE line detection works with indented comments."
+  (with-temp-buffer
+    (setq-local comment-start ";")
+    (setq-local comment-end "")
+    (insert "    ;; DONE: indented task\n")
+    (goto-char (point-min))
+    
+    (cl-letf (((symbol-function 'completing-read) (lambda (&rest _) "Toggle to TODO"))
+              ((symbol-function 'region-active-p) (lambda () nil)))
+      (let ((result (ai-code--implement-todo--handle-done-line)))
+        (should result)
+        (goto-char (point-min))
+        (should (looking-at-p "    ;; TODO: indented task"))))))
+
 (provide 'test_ai-code-change)
 
 ;;; test_ai-code-change.el ends here
