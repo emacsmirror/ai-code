@@ -236,7 +236,7 @@ If cursor is inside a function, implement comments for that function.
 Otherwise implement comments for the entire current file.
 Argument ARG is the prefix argument."
   ;; DONE: if the current line under cursor is a comment prefix with DONE: ,
-  ;; ask user if he want to toggle it to TODO, or delete the comment line
+  ;; ask the user if they want to toggle it to TODO, or delete the comment line
   ;; DONE: this function is too long. break it into three major branch
   ;; with sub functions
   (interactive "P")
