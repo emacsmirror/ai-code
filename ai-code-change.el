@@ -241,7 +241,7 @@ Argument ARG is the prefix argument."
   ;; with sub functions
   (interactive "P")
   (if (not buffer-file-name)
-      (message "Error: buffer-file-name must be available")
+      (user-error "Error: buffer-file-name must be available")
     (cl-block finalize
       (when (ai-code--implement-todo--handle-done-line)
         (cl-return-from finalize nil))
