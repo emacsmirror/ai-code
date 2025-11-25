@@ -256,7 +256,7 @@ Returns non-nil if the action is handled and the caller should exit."
          (comment-prefix (and comment-start (string-trim-right comment-start)))
          (done-re (when comment-prefix
                     (concat "^\\([ \t]*" (regexp-quote comment-prefix) "+[ \t]*\\)DONE:"))))
-    (when (and line-str done-re (string-match done-re line-str))
+    (when (and line-str done-re (string-match done-re line-str) (not (region-active-p)))
       (let* ((action (completing-read
                       "Current line starts with DONE:. Action: "
                       '("Toggle to TODO" "Delete comment line" "Keep as DONE")
