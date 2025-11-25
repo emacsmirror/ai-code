@@ -125,16 +125,16 @@ is between the function definition and its body."
     ;; Mock ai-code--is-comment-line for this test
     (cl-letf (((symbol-function 'ai-code--is-comment-line)
                (lambda (line) (string-match-p "^[ \t]*;" line))))
-      
+
       ;; Test with all commented lines
       (should (ai-code--is-comment-block "; line 1\n; line 2"))
-      
+
       ;; Test with commented lines and blank lines
       (should (ai-code--is-comment-block "; line 1\n\n; line 3"))
-      
+
       ;; Test with mixed lines (should fail)
       (should-not (ai-code--is-comment-block "; line 1\ncode line"))
-      
+
       ;; Test with all code lines (should fail)
       (should-not (ai-code--is-comment-block "code 1\ncode 2"))
 
@@ -153,7 +153,7 @@ is between the function definition and its body."
     (goto-char (point-min))
     (set-mark (point))
     (goto-char (point-max))
-    
+
     ;; Mock external functions
     (cl-letf (((symbol-function 'region-active-p) (lambda () t))
               ((symbol-function 'ai-code--get-clipboard-text) (lambda () nil))
@@ -162,7 +162,7 @@ is between the function definition and its body."
               ((symbol-function 'which-function) (lambda () nil))
               ;; Mock ai-code--is-comment-line to fail for our code lines
               ((symbol-function 'ai-code--is-comment-line) (lambda (_) nil)))
-      
+
       ;; Should signal user-error
       (should-error (ai-code-implement-todo nil) :type 'user-error))))
 
@@ -176,7 +176,7 @@ is between the function definition and its body."
     (insert "Line 1\n\nLine 3")
     (goto-char (point-min))
     (forward-line 1) ;; On the blank line
-    
+
     ;; Mock interactive functions and external dependencies
     (cl-letf (((symbol-function 'read-string) (lambda (&rest _) "my task"))
               ((symbol-function 'ai-code--insert-prompt) (lambda (&rest _) t))
@@ -188,9 +188,9 @@ is between the function definition and its body."
               ((symbol-function 'which-function) (lambda () nil))
               ;; Ensure region-active-p returns nil as expected
               ((symbol-function 'region-active-p) (lambda () nil)))
-      
+
       (ai-code-implement-todo nil)
-      
+
       ;; Check the line content
       (beginning-of-line)
       ;; It should look like "; TODO: my task" potentially with indentation
@@ -206,11 +206,11 @@ is between the function definition and its body."
     (insert "Line 1\n;; DONE: completed task\nLine 3")
     (goto-char (point-min))
     (forward-line 1) ;; On the DONE line
-    
+
     ;; Mock completing-read to return "Toggle to TODO"
     (cl-letf (((symbol-function 'completing-read) (lambda (&rest _) "Toggle to TODO"))
               ((symbol-function 'region-active-p) (lambda () nil)))
-      
+
       (let ((result (ai-code--implement-todo--handle-done-line)))
         ;; Should return t indicating the action was handled
         (should result)
@@ -228,11 +228,11 @@ is between the function definition and its body."
     (insert "Line 1\n;; DONE: completed task\nLine 3")
     (goto-char (point-min))
     (forward-line 1) ;; On the DONE line
-    
+
     ;; Mock completing-read to return "Delete comment line"
     (cl-letf (((symbol-function 'completing-read) (lambda (&rest _) "Delete comment line"))
               ((symbol-function 'region-active-p) (lambda () nil)))
-      
+
       (let ((result (ai-code--implement-todo--handle-done-line)))
         ;; Should return t indicating the action was handled
         (should result)
@@ -249,11 +249,11 @@ is between the function definition and its body."
     (insert "Line 1\n;; DONE: completed task\nLine 3")
     (goto-char (point-min))
     (forward-line 1) ;; On the DONE line
-    
+
     ;; Mock completing-read to return "Keep as DONE"
     (cl-letf (((symbol-function 'completing-read) (lambda (&rest _) "Keep as DONE"))
               ((symbol-function 'region-active-p) (lambda () nil)))
-      
+
       (let ((result (ai-code--implement-todo--handle-done-line)))
         ;; Should return t indicating the action was handled
         (should result)
@@ -269,7 +269,7 @@ is between the function definition and its body."
     (setq-local comment-end "")
     (insert ";; TODO: a task\n")
     (goto-char (point-min))
-    
+
     (cl-letf (((symbol-function 'region-active-p) (lambda () nil)))
       (let ((result (ai-code--implement-todo--handle-done-line)))
         ;; Should return nil as the line is not a DONE line
@@ -282,7 +282,7 @@ is between the function definition and its body."
     (setq-local comment-end "")
     (insert ";; DONE: completed task\n")
     (goto-char (point-min))
-    
+
     ;; Mock region-active-p to return t
     (cl-letf (((symbol-function 'region-active-p) (lambda () t)))
       (let ((result (ai-code--implement-todo--handle-done-line)))
@@ -297,21 +297,21 @@ is between the function definition and its body."
     (setq-local comment-end "")
     (insert "# DONE: python task\n")
     (goto-char (point-min))
-    
+
     (cl-letf (((symbol-function 'completing-read) (lambda (&rest _) "Toggle to TODO"))
               ((symbol-function 'region-active-p) (lambda () nil)))
       (let ((result (ai-code--implement-todo--handle-done-line)))
         (should result)
         (goto-char (point-min))
         (should (looking-at-p "# TODO: python task")))))
-  
+
   ;; Test with double slash comment (C/Java style)
   (with-temp-buffer
     (setq-local comment-start "// ")
     (setq-local comment-end "")
     (insert "// DONE: java task\n")
     (goto-char (point-min))
-    
+
     (cl-letf (((symbol-function 'completing-read) (lambda (&rest _) "Toggle to TODO"))
               ((symbol-function 'region-active-p) (lambda () nil)))
       (let ((result (ai-code--implement-todo--handle-done-line)))
@@ -326,7 +326,7 @@ is between the function definition and its body."
     (setq-local comment-end "")
     (insert "    ;; DONE: indented task\n")
     (goto-char (point-min))
-    
+
     (cl-letf (((symbol-function 'completing-read) (lambda (&rest _) "Toggle to TODO"))
               ((symbol-function 'region-active-p) (lambda () nil)))
       (let ((result (ai-code--implement-todo--handle-done-line)))
