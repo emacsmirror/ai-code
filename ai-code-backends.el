@@ -80,7 +80,7 @@ When called from Lisp code, sends CMD directly without prompting."
      :upgrade "npm install -g @github/copilot"
      :cli     "copilot")
     (codex
-     :label "OpenAI Codex"
+     :label "OpenAI Codex CLI"
      :require ai-code-codex-cli
      :start   codex-cli
      :switch  codex-cli-switch-to-buffer
