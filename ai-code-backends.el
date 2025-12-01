@@ -64,7 +64,7 @@ When called from Lisp code, sends CMD directly without prompting."
      :require gemini-cli
      :start   gemini-cli
      :switch  gemini-cli-switch-to-buffer
-     :send    gemini-cli-send-command
+     :send    gemini-cli--do-send-command
      :resume  nil
      :config  "~/.gemini/settings.json"
      :upgrade "npm install -g @google/gemini-cli"
