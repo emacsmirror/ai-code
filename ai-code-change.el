@@ -319,13 +319,13 @@ ARG is the prefix argument for clipboard context."
            (region-text
             (unless (ai-code--is-comment-block region-text)
               (user-error "Selected region must be a comment block"))
-           (format (concat
-                     "Please implement code for this requirement comment block in the selected region. "
-                     "Keep the comment in place and ensure it begins with a DONE prefix (change TODO to DONE or prepend DONE if no prefix). "
+            (format (concat
+                     "Please implement code for this requirement comment block in the selected region first. "
+                     "After implementing, keep the comment in place and ensure it begins with a DONE prefix (change TODO to DONE or prepend DONE if no prefix). "
                      "If this is a pure new code block, place it after the comment; otherwise keep the existing structure and make corresponding change for the context.\n%s\n%s%s%s")
                     region-location-line region-text function-context files-context-string))
            (is-comment
-            (format "Please implement code for this requirement comment on line %d: '%s'. Keep the comment in place and ensure it begins with a DONE prefix (change TODO to DONE or prepend DONE if needed). If this is a pure new code block, place it after the comment; otherwise keep the existing structure and make corresponding change for the context.%s%s"
+            (format "Please implement code for this requirement comment on line %d: '%s' first. After implementing, keep the comment in place and ensure it begins with a DONE prefix (change TODO to DONE or prepend DONE if needed). If this is a pure new code block, place it after the comment; otherwise keep the existing structure and make corresponding change for the context.%s%s"
                     current-line-number current-line function-context files-context-string))
            ;; (function-name
            ;;  (format "Please implement code after all TODO comments in function '%s'. The TODOs are TODO comments. Keep each comment in place and ensure each begins with a DONE prefix (change TODO to DONE or prepend DONE if needed) before adding implementation code after it. Keep the existing code structure and only add code after these marked items.%s"
