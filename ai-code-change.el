@@ -302,6 +302,7 @@ ARG is the prefix argument for clipboard context."
                                        (format "Selected region starting on line %d"
                                                region-start-line)))))
          (files-context-string (ai-code--get-context-files-string))
+         (repo-context-string (ai-code--format-repo-context-info))
          (prompt-label
           (cond
            ((and clipboard-context
@@ -342,7 +343,8 @@ ARG is the prefix argument for clipboard context."
           (concat prompt
                   (when (and clipboard-context
                              (string-match-p "\\S-" clipboard-context))
-                    (concat "\n\nClipboard context:\n" clipboard-context)))))
+                    (concat "\n\nClipboard context:\n" clipboard-context))
+                  repo-context-string)))
     (ai-code--insert-prompt final-prompt)))
 
 ;;; Flycheck integration
