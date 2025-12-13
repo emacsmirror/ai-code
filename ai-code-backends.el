@@ -97,7 +97,7 @@ When called from Lisp code, sends CMD directly without prompting."
      :send    opencode-send-command
      :resume  opencode-resume
      :config  "~/.opencode/config.json"
-     :upgrade nil
+     :upgrade "npm i -g opencode-ai@latest"
      :cli     "opencode")
     (grok
      :label "Grok CLI"
