@@ -1,4 +1,4 @@
-;;; ai-code-prompt-mode.el --- An Emacs interface for AI-assisted software development -*- lexical-binding: t; -*-
+;;; ai-code-prompt-mode.el --- Unified interface for multiple AI coding CLI tool -*- lexical-binding: t; -*-
 
 ;; Author: Kang Tu <tninja@gmail.com>
 
