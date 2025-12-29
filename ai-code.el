@@ -203,10 +203,15 @@ Otherwise, run the original command for SPC."
     (when ai-code--original-spc-command-in-evil-normal-state
       (call-interactively ai-code--original-spc-command-in-evil-normal-state))))
 
-;; Integration with evil-mode: This with-eval-after-load is intentional
-;; to provide optional Evil integration without requiring Evil as a dependency
-(with-eval-after-load 'evil
-  (when (boundp 'evil-normal-state-map)
+;;;###autoload
+(defun ai-code-evil-setup ()
+  "Setup AI Code integration with Evil mode.
+This function configures SPC key binding in Evil normal state for
+special AI Code buffers.  Call this function after Evil is loaded,
+typically in your Emacs configuration with:
+  (with-eval-after-load 'evil (ai-code-evil-setup))"
+  (interactive)
+  (when (and (featurep 'evil) (boundp 'evil-normal-state-map))
     (unless ai-code--original-spc-command-in-evil-normal-state
       (setq ai-code--original-spc-command-in-evil-normal-state
             (lookup-key evil-normal-state-map (kbd "SPC"))))

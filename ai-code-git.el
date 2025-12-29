@@ -488,16 +488,15 @@ Call this function to register the AI Code commands with Magit."
   (interactive)
   ;; Integration with magit: This with-eval-after-load is intentional
   ;; to provide optional Magit integration without breaking when Magit is absent
-  (with-eval-after-load 'magit
-    ;; For magit-diff-popup (usually 'd' in status buffer)
-    (transient-append-suffix 'magit-diff "r" ; "Extra" group
-      '("a" "AI Code: Review/generate diff" ai-code-pull-or-review-diff-file))
-    ;; For magit-blame-popup (usually 'B' in status buffer or log)
-    (transient-append-suffix 'magit-blame "b" ; "Extra" group
-      '("a" "AI Code: Analyze blame" ai-code-magit-blame-analyze))
-    ;; For magit-log-popup (usually 'l' in status buffer)
-    (transient-append-suffix 'magit-log "b" ; "Extra" group
-      '("a" "AI Code: Analyze log" ai-code-magit-log-analyze))))
+  ;; For magit-diff-popup (usually 'd' in status buffer)
+  (transient-append-suffix 'magit-diff "r" ; "Extra" group
+    '("a" "AI Code: Review/generate diff" ai-code-pull-or-review-diff-file))
+  ;; For magit-blame-popup (usually 'B' in status buffer or log)
+  (transient-append-suffix 'magit-blame "b" ; "Extra" group
+    '("a" "AI Code: Analyze blame" ai-code-magit-blame-analyze))
+  ;; For magit-log-popup (usually 'l' in status buffer)
+  (transient-append-suffix 'magit-log "b" ; "Extra" group
+    '("a" "AI Code: Analyze log" ai-code-magit-log-analyze)))
 
 ;; Ensure the Magit transients are set up when this file is loaded.
 ;; (ai-code-magit-setup-transients)
