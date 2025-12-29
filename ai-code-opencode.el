@@ -20,6 +20,8 @@
 (declare-function claude-code-switch-to-buffer "claude-code")
 (declare-function claude-code-send-command "claude-code" (line))
 (defvar claude-code-terminal-backend)
+(defvar claude-code-program)
+(defvar claude-code-program-switches)
 
 
 (defgroup ai-code-opencode nil

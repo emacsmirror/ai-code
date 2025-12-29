@@ -18,6 +18,8 @@
 (declare-function claude-code--do-send-command "claude-code" (cmd))
 (declare-function claude-code-switch-to-buffer "claude-code")
 (defvar claude-code-terminal-backend)
+(defvar claude-code-program)
+(defvar claude-code-program-switches)
 
 
 (defgroup ai-code-codex-cli nil

@@ -12,16 +12,15 @@
 
 (require 'ai-code-backends)
 
-(defvar claude-code-program)
-(defvar claude-code-program-switches)
-(defvar claude-code-terminal-backend)
 (declare-function claude-code "claude-code" (&optional arg extra-switches force-prompt force-switch-to-buffer))
 (declare-function claude-code-resume "claude-code" (&optional arg))
 (declare-function claude-code-switch-to-buffer "claude-code" (&optional arg))
 (declare-function claude-code--start "claude-code" (arg extra-switches &optional force-prompt force-switch-to-buffer))
 (declare-function claude-code--term-send-string "claude-code" (backend string))
 (declare-function claude-code--do-send-command "claude-code" (cmd))
-
+(defvar claude-code-terminal-backend)
+(defvar claude-code-program)
+(defvar claude-code-program-switches)
 
 (defgroup ai-code-github-copilot-cli nil
   "GitHub Copilot CLI integration via `claude-code'."
