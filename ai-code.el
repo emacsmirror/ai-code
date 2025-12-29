@@ -209,7 +209,7 @@ Otherwise, run the original command for SPC."
 This function configures SPC key binding in Evil normal state for
 special AI Code buffers.  Call this function after Evil is loaded,
 typically in your Emacs configuration with:
-  (with-eval-after-load 'evil (ai-code-evil-setup))"
+  (with-eval-after-load \\='evil (ai-code-evil-setup))"
   (interactive)
   (when (and (featurep 'evil) (boundp 'evil-normal-state-map))
     (unless ai-code--original-spc-command-in-evil-normal-state
