@@ -52,7 +52,7 @@ When called from Lisp code, sends CMD directly without prompting."
      :send    ai-code-claude-code-send-command
      :resume  claude-code-resume
      :config  "~/.claude.json"
-     :upgrade nil
+     :upgrade "npm install -g @anthropic-ai/claude-code@latest"
      :cli     "claude")
     (claude-code-ide
      :label "claude-code-ide.el"
@@ -62,7 +62,7 @@ When called from Lisp code, sends CMD directly without prompting."
      :send    claude-code-ide-send-prompt
      :resume  claude-code-ide-resume
      :config  "~/.claude.json"
-     :upgrade nil
+     :upgrade "npm install -g @anthropic-ai/claude-code@latest"
      :cli     "claude")
     (gemini
      :label "Gemini CLI"
@@ -70,7 +70,7 @@ When called from Lisp code, sends CMD directly without prompting."
      :start   gemini-cli
      :switch  gemini-cli-switch-to-buffer
      :send    gemini-cli--do-send-command
-     :resume  nil
+     :resume  gemini-cli-resume
      :config  "~/.gemini/settings.json"
      :upgrade "npm install -g @google/gemini-cli"
      :cli     "gemini")
@@ -112,7 +112,7 @@ When called from Lisp code, sends CMD directly without prompting."
      :send    ai-code-grok-cli-send-command
      :resume  ai-code-grok-cli-resume
      :config  "~/.config/grok/config.json"
-     :upgrade nil
+     :upgrade "bun add -g @vibe-kit/grok-cli"
      :cli     "grok"))
   "Available AI backends and how to integrate with them.
 Each entry is (KEY :label STRING :require FEATURE :start FN :switch FN
