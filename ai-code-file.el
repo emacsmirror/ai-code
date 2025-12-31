@@ -241,7 +241,7 @@ Return the final command string."
          (command
           (if (string-prefix-p ":" initial-command)
               ;; If command starts with :, treat as prompt for AI
-              (let* ((base-prompt (concat "Generate a shell command (pure command, no fense, no duplicate) for: " (substring initial-command 1)))
+              (let* ((base-prompt (concat "Generate a shell command (pure command, no fense, no duplicate, in one line) for: " (substring initial-command 1)))
                      (prompt (if (derived-mode-p 'dired-mode)
                                  (let* ((files (ignore-errors (dired-get-marked-files)))
                                         (file-names (when files (delete-dups (mapcar #'file-name-nondirectory files)))))
@@ -251,10 +251,14 @@ Return the final command string."
                                      base-prompt))
                                base-prompt)))
                 (condition-case err
-                    (let ((ai-generated (ai-code-call-gptel-sync prompt)))
-                      (when ai-generated
+                    ;; DONE: if ai-generated has more than one line,
+                    ;; only take the first line
+                    (let* ((ai-generated (ai-code-call-gptel-sync prompt))
+                           (first-line (when ai-generated
+                                         (car (split-string ai-generated "\n" t)))))
+                      (when first-line
                         ;; Ask user to confirm/edit the AI-generated command
-                        (read-string "Shell command (AI generated): " (string-trim ai-generated))))
+                        (read-string "Shell command (AI generated): " (string-trim first-line))))
                   (error
                    (message "Failed to generate command with AI: %s" err)
                    "")))
