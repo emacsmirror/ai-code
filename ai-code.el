@@ -105,7 +105,7 @@ ARG is the prefix argument."
                                 (string-match-p "\\S-" clipboard-context))
                            "Send to AI (clipboard context): "
                          "Send to AI: ")))
-    (when-let ((prompt (ai-code-read-string prompt-label initial-input)))
+    (when-let* ((prompt (ai-code-read-string prompt-label initial-input)))
       (let ((final-prompt (if (and clipboard-context
                                    (string-match-p "\\S-" clipboard-context))
                               (concat prompt

@@ -346,7 +346,7 @@ Works with GitHub, GitLab, Bitbucket, and other Git hosting services."
 (defun ai-code--magit-generate-feature-branch-diff-file ()
   "Generate a diff file based on user-selected type (staged, branches, commit).
 For non-staged diffs, user is prompted whether to open in browser."
-  (when-let ((git-root (ai-code--validate-git-repository)))
+  (when-let* ((git-root (ai-code--validate-git-repository)))
     (let* ((selected-diff-type-value (ai-code--get-diff-type-choice))
            (open-in-browser (and (not (eq selected-diff-type-value 'staged))
                                  (y-or-n-p "Open diff in browser? ")))

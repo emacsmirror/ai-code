@@ -202,7 +202,7 @@ The function splits the prompt by whitespace, checks if each part is a file
 path within the current git repository, and if so, replaces it with a
 relative path prefixed with @.
 NOTE: This does not handle file paths containing spaces."
-  (if-let ((git-root (magit-toplevel)))
+  (if-let* ((git-root (magit-toplevel)))
       (let ((git-root-truename (file-truename git-root)))
         (mapconcat
          (lambda (word) (ai-code--process-word-for-filepath word git-root-truename))
