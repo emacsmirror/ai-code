@@ -4,9 +4,6 @@
 
 ;; SPDX-License-Identifier: Apache-2.0
 
-;;; Commentary:
-;; This file provides a major mode for editing AI prompt files.
-
 ;;; Code:
 
 (require 'org)
