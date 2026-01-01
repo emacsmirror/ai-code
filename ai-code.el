@@ -21,7 +21,7 @@
 ;;   - Opencode
 ;;   - Grok CLI
 ;;
-;; claude-code.el (https://github.com/stevemolitor/claude-code.el) are
+;; Dependency: claude-code.el (https://github.com/stevemolitor/claude-code.el) are
 ;; used as infrastructure (eat / vterm integration) for OpenAI Codex,
 ;; GitHub Copilot CLI, Opencode, and Grok CLI backends. So it is
 ;; required to install claude-code.el when using those backends.
