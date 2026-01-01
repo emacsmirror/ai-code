@@ -3,6 +3,9 @@
 
 ** Main branch change
 
+** 0.80
+- Published to MELPA, update README and package description
+
 ** 0.74
 - Feat: Add ai-code-insert-function-at-point, it is useful during writing TODO comment, to implement a feature referring to an existing function, from visible buffers
 - Feat: Explain code in scope feature added choices: A. files visible; B. git repository
