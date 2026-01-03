@@ -101,7 +101,7 @@ When called from Lisp code, sends CMD directly without prompting."
      :switch  ai-code-opencode-switch-to-buffer
      :send    ai-code-opencode-send-command
      :resume  ai-code-opencode-resume
-     :config  "~/.opencode.json"
+     :config  "~/.config/opencode/opencode.jsonc"
      :upgrade "npm i -g opencode-ai@latest"
      :cli     "opencode")
     (grok
