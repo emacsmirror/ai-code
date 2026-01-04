@@ -14,11 +14,13 @@
 ;;
 ;;; Code:
 
+(require 'ai-code-backends)
+
 (declare-function claude-code "claude-code" (&optional arg))
 (declare-function claude-code--start "claude-code" (arg extra-switches &optional force-prompt force-switch-to-buffer))
 (declare-function claude-code--term-send-string "claude-code" (backend string))
+(declare-function claude-code--do-send-command "claude-code" (cmd))
 (declare-function claude-code-switch-to-buffer "claude-code")
-(declare-function claude-code-send-command "claude-code" (line))
 (defvar claude-code-terminal-backend)
 (defvar claude-code-program)
 (defvar claude-code-program-switches)
@@ -59,7 +61,7 @@ ARG is passed to `claude-code'."
   "Send LINE to Opencode.
 When called interactively, prompts for the command."
   (interactive "sOpencode> ")
-  (claude-code-send-command line))
+  (claude-code--do-send-command line))
 
 ;;;###autoload
 (defun ai-code-opencode-resume (&optional arg)
@@ -78,7 +80,7 @@ prompt for the project directory."
   (interactive "P")
   (let ((claude-code-program ai-code-opencode-program)
         (claude-code-program-switches ai-code-opencode-program-switches))
-    (claude-code--start arg '("resume") nil t)
+    (claude-code--start arg '("--continue") nil t)
     (claude-code--term-send-string claude-code-terminal-backend "")
     (with-current-buffer claude-code-terminal-backend
       (goto-char (point-min)))))
