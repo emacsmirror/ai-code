@@ -121,6 +121,7 @@ This package makes context engineering easy by automatically assembling precise 
 - Function or region scoping: most actions capture the current function or active region, keeping requests focused (e.g., `ai-code-code-change`, `ai-code-implement-todo`, `ai-code-ask-question`).
 - Manual context curation: `C-c a @` (`ai-code-context-action`) stores file paths, function anchors, or region ranges in a repo-scoped list, which is appended to prompts via `ai-code--format-repo-context-info`.
 - Optional clipboard context: prefix with `C-u` to append clipboard content to prompts for external snippets or logs.
+- Prompt suffix guardrails: set `ai-code-prompt-suffix` to append persistent constraints to every prompt (when `ai-code-use-prompt-suffix` is non-nil). Example: `(setq ai-code-prompt-suffix "Only use English in code file, but Reply in Simplified Chinese language")`.
 
 Example (focused refactor with curated context):
 1) In a buffer, run `C-c a @` to add the current function or selected region to stored repo context.
