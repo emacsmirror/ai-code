@@ -2,6 +2,8 @@
 * Release history
 
 ** Main branch change
+- Chore: C-u on ai-code-cli-start will prompt user to enter CLI args
+- Feat: Better support for task management
 
 ** 1.00
 - Fix: add back multiple session support
