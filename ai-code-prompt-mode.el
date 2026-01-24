@@ -53,30 +53,25 @@ This is the file name without path."
 
 ;;;###autoload
 (defun ai-code-open-prompt-file ()
-  "Open AI prompt file under git repo root.
+  "Open AI prompt file under .ai.code.files/ directory.
 If file doesn't exist, create it with sample prompt."
   (interactive)
-  (let* ((git-root (magit-toplevel))
-         (prompt-file (when git-root
-                        (expand-file-name ai-code-prompt-file-name git-root))))
-    (if prompt-file
-        (progn
-          (find-file-other-window prompt-file)
-          (unless (file-exists-p prompt-file)
-            ;; Insert initial content for new file
-            (insert "# AI Prompt File\n")
-            (insert "# This file is for storing AI prompts and instructions\n")
-            (insert "# Use this file to save reusable prompts for your AI assistant\n\n")
-            (insert "* Sample prompt:\n\n")
-            (insert "Explain the architecture of this codebase\n")
-            (save-buffer)))
-      (message "Not in a git repository"))))
+  (let* ((files-dir (ai-code--ensure-files-directory))
+         (prompt-file (expand-file-name ai-code-prompt-file-name files-dir)))
+    (find-file-other-window prompt-file)
+    (unless (file-exists-p prompt-file)
+      ;; Insert initial content for new file
+      (insert "# AI Prompt File\n")
+      (insert "# This file is for storing AI prompts and instructions\n")
+      (insert "# Use this file to save reusable prompts for your AI assistant\n\n")
+      (insert "* Sample prompt:\n\n")
+      (insert "Explain the architecture of this codebase\n")
+      (save-buffer))))
 
 (defun ai-code--get-ai-code-prompt-file-path ()
-  "Get the path to the AI prompt file in the current git repository."
-  (let* ((git-root (magit-toplevel)))
-    (when git-root
-      (expand-file-name ai-code-prompt-file-name git-root))))
+  "Get the path to the AI prompt file in the .ai.code.files/ directory."
+  (let ((files-dir (ai-code--get-files-directory)))
+    (expand-file-name ai-code-prompt-file-name files-dir)))
 
 (defun ai-code--execute-command (command)
   "Execute COMMAND directly without saving to prompt file."
@@ -248,6 +243,103 @@ It trims leading/trailing whitespace."
           (ai-code-cli-send-command trimmed-text)
           (ai-code-cli-switch-to-buffer))
       (message "No text in the current block to send."))))
+
+;; ai coding task feature
+
+;;;###autoload
+(defconst ai-code-files-dir-name ".ai.code.files"
+  "Directory name for storing AI task files.")
+
+;;;###autoload
+(defcustom ai-code-task-use-gptel-filename nil
+  "Whether to use GPTel to generate filename for task files.
+If non-nil, call `ai-code-call-gptel-sync` to generate a smart filename
+based on the task name. Otherwise, use cleaned-up task name directly."
+  :type 'boolean
+  :group 'ai-code)
+
+(defun ai-code--get-files-directory ()
+  "Get the task directory path.
+If in a git repository, return `.ai.code.files/` under git root.
+Otherwise, return the current `default-directory`."
+  (let ((git-root (magit-toplevel)))
+    (if git-root
+        (expand-file-name ai-code-files-dir-name git-root)
+      default-directory)))
+
+(defun ai-code--ensure-files-directory ()
+  "Ensure the task directory exists and return its path."
+  (let ((ai-code-files-dir (ai-code--get-files-directory)))
+    (unless (file-directory-p ai-code-files-dir)
+      (make-directory ai-code-files-dir t))
+    ai-code-files-dir))
+
+(defun ai-code--generate-task-filename (task-name)
+  "Generate a task filename from TASK-NAME.
+If `ai-code-task-use-gptel-filename` is non-nil, use GPTel to generate
+a smart filename. Otherwise, use cleaned-up task name directly.
+If TASK-NAME contains 'rdar://ID', use 'rdar_ID_' as prefix.
+Otherwise, use 'task_YYYYMMDD_' as prefix.
+Returns a filename with .org suffix."
+  (let* ((radar-id (when (string-match "rdar://\\([0-9]+\\)" task-name)
+                     (match-string 1 task-name)))
+         (prefix (if radar-id
+                     (format "rdar_%s_" radar-id)
+                   (format "task_%s_" (format-time-string "%Y%m%d"))))
+         (generated-name
+          (if ai-code-task-use-gptel-filename
+              ;; Use GPTel to generate filename
+              (condition-case nil
+                  (ai-code-call-gptel-sync
+                   (format "Generate a short English filename (max 60 chars, lowercase, use underscores for spaces, no extension) for this task: %s" task-name))
+                (error (replace-regexp-in-string "[^a-z0-9_]" "_" (downcase task-name))))
+            ;; Use task name directly (cleaned up)
+            (replace-regexp-in-string "[^a-z0-9_]" "_" (downcase task-name)))))
+    ;; Clean up the generated name
+    (setq generated-name (replace-regexp-in-string "[^a-z0-9_]" "_" (downcase generated-name)))
+    (setq generated-name (replace-regexp-in-string "_+" "_" generated-name))
+    (setq generated-name (replace-regexp-in-string "^_\\|_$" "" generated-name))
+    ;; Ensure reasonable length
+    (when (> (length generated-name) 60)
+      (setq generated-name (substring generated-name 0 60)))
+    (concat prefix generated-name ".org")))
+
+;;;###autoload
+(defun ai-code-create-or-open-task-file ()
+  "Create or open an AI task file.
+Prompts for a task name. If empty, opens the task directory.
+If non-empty, optionally prompts for a URL, generates a filename
+using GPTel, and creates the task file."
+  (interactive)
+  (let ((task-name (read-string "Task name (empty to open task directory): ")))
+    (if (string-empty-p task-name)
+        ;; Open the task directory
+        (let ((ai-code-files-dir (ai-code--ensure-files-directory)))
+          (dired-other-window ai-code-files-dir)
+          (message "Opened task directory: %s" ai-code-files-dir))
+      ;; Create a new task file
+      (let* ((task-url (read-string "URL (optional, press Enter to skip): "))
+             (ai-code-files-dir (ai-code--ensure-files-directory))
+             (generated-filename (ai-code--generate-task-filename task-name))
+             (confirmed-filename (read-string "Confirm task filename: " generated-filename))
+             (task-file (expand-file-name confirmed-filename ai-code-files-dir)))
+        ;; Ensure filename has .org extension
+        (unless (string-suffix-p ".org" confirmed-filename)
+          (setq task-file (concat task-file ".org")))
+        (find-file-other-window task-file)
+        (unless (file-exists-p task-file)
+          ;; Initialize new task file
+          (insert (format "#+TITLE: %s\n" task-name))
+          (insert (format "#+DATE: %s\n" (format-time-string "%Y-%m-%d")))
+          (unless (string-empty-p task-url)
+            (insert (format "#+URL: %s\n" task-url)))
+          (insert "\n* Task Description\n\n")
+          (insert task-name)
+          (insert "\n\n* Investigation\n\n")
+          (insert "# Enter your prompts here. After that,\n# Select them and use C-c a SPC (ai-code-send-command) to send to AI\n\n")
+          (insert "# Use C-c a n (ai-code-take-notes) to copy notes back from AI session\n\n")
+          (insert "\n\n* Code Change\n\n"))
+        (message "Opened task file: %s" task-file)))))
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist
