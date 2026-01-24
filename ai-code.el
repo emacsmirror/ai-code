@@ -161,7 +161,11 @@ Otherwise switch to AI CLI buffer."
   (if (and current-prefix-arg
            (ai-code-backends-infra--session-buffer-p (current-buffer)))
       (quit-window)
-    (ai-code-cli-switch-to-buffer t)))
+    ;; Try with argument first; fall back to no-arg call if function doesn't accept it
+    (condition-case nil
+        (ai-code-cli-switch-to-buffer t)
+      (wrong-number-of-arguments ;; will be triggered during calling corresponding function in external backends such as claude-code-ide.el, claude-code.el, since the corresponding function doesn't have parameter
+       (ai-code-cli-switch-to-buffer)))))
 
 (defclass ai-code--use-prompt-suffix-type (transient-lisp-variable)
   ((variable :initform 'ai-code-use-prompt-suffix)
