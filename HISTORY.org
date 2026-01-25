@@ -6,6 +6,7 @@
 ** 1.01
 - Chore: C-u on ai-code-cli-start will prompt user to enter CLI args
 - Feat: Better support for task management
+- Fix: ai-code--setup-snippets silently fails, reported by lesteral
 
 ** 1.00
 - Fix: add back multiple session support
