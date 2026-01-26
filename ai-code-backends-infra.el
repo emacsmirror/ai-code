@@ -54,7 +54,7 @@ Can be either `vterm' or `eat'."
                  (const :tag "Bottom" bottom))
   :group 'ai-code-backends-infra)
 
-(defcustom ai-code-backends-infra-window-width 80
+(defcustom ai-code-backends-infra-window-width 90
   "Width of the side window when opened on left or right."
   :type 'integer
   :group 'ai-code-backends-infra)
