@@ -139,7 +139,7 @@ Example (focused refactor with curated context):
 3) Place the cursor in the target function and run `C-c a c` to request a change.
 The generated prompt will include the function/region scope, visible file list, and stored repo context entries, giving the AI exactly the surrounding information it needs.
 
-*** Desktop Notifications
+*** Desktop Notifications (Experimental)
 
 When working with multiple AI sessions, it can be useful to receive desktop notifications when AI responses are complete. This is especially helpful when you prompt an AI and then switch to other tasks while waiting for the response.
 
@@ -153,22 +153,6 @@ When working with multiple AI sessions, it can be useful to receive desktop noti
 - When the terminal has been idle for ~1.5 seconds (configurable via `ai-code-backends-infra-idle-delay`), it's considered a completed response.
 - If the AI session buffer is not currently visible/focused, a desktop notification is sent.
 - Notifications are throttled to avoid spam (minimum 2 seconds between notifications).
-
-**** Customization
-You can customize notification behavior with these variables:
-#+begin_src emacs-lisp
-  ;; Enable/disable notifications
-  (setq ai-code-notifications-enabled t)
-  
-  ;; Show notifications when AI completes a response
-  (setq ai-code-notifications-show-on-response t)
-  
-  ;; Notification timeout in milliseconds (0 = no timeout)
-  (setq ai-code-notifications-timeout 5000)
-  
-  ;; Idle delay before considering response complete (in seconds)
-  (setq ai-code-backends-infra-idle-delay 1.5)
-#+end_src
 
 **** Platform Support
 - On Linux with D-Bus, native desktop notifications are used.
