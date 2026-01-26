@@ -116,7 +116,7 @@ Can be either `vterm' or `eat'."
 (defvar-local ai-code-backends-infra--idle-timer nil
   "Timer for detecting idle state (response completion).")
 
-(defcustom ai-code-backends-infra-idle-delay 1.5
+(defcustom ai-code-backends-infra-idle-delay 5.0
   "Delay in seconds of inactivity before considering response complete.
 After this period of terminal inactivity, a notification may be sent
 if the AI session buffer is not currently visible."
