@@ -34,6 +34,8 @@ Set to 0 for no timeout (notification stays until dismissed)."
 
 ;;; Variables
 
+(declare-function notifications-notify "notifications")
+
 (defvar ai-code-notifications--last-notification-time nil
   "Time of the last notification, to avoid spamming.")
 
