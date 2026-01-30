@@ -5,7 +5,7 @@
 ;; SPDX-License-Identifier: Apache-2.0
 
 ;;; Commentary:
-;; Backend selection support extracted from ai-code-interface.el.
+;; Backend selection support extracted from ai-code.el.
 
 ;;; Code:
 

@@ -29,7 +29,7 @@
   :type 'string
   :group 'ai-code)
 
-;; Variables that will be defined in ai-code-interface.el
+;; Variables that will be defined in ai-code.el
 (defvar ai-code-use-prompt-suffix)
 (defvar ai-code-prompt-suffix)
 (defvar ai-code-cli)

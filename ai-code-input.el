@@ -1,4 +1,4 @@
-;;; ai-code-input.el --- Helm completion for ai-code-interface.el -*- lexical-binding: t; -*-
+;;; ai-code-input.el --- Helm completion for ai-code.el -*- lexical-binding: t; -*-
 
 ;; Author: Kang Tu <tninja@gmail.com>
 ;; Keywords: convenience, tools
@@ -6,8 +6,8 @@
 ;; SPDX-License-Identifier: Apache-2.0
 
 ;;; Commentary:
-;; Optional Helm completion interface for ai-code-interface.el
-;; To use this, ensure both ai-code-interface.el and helm are installed.
+;; Optional Helm completion interface for ai-code.el
+;; To use this, ensure both ai-code.el and helm are installed.
 
 ;;; Code:
 
