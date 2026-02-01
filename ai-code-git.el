@@ -32,6 +32,13 @@ Candidate values:
 
 (defvar ai-code-files-dir-name)
 
+(defun ai-code--git-ignored-repo-file-p (file root)
+  "Return non-nil when FILE should be ignored for repo candidates."
+  (when (and file root)
+    (let ((ignore-dir (file-truename (expand-file-name ai-code-files-dir-name root)))
+          (truename (file-truename file)))
+      (string-prefix-p ignore-dir truename))))
+
 ;;;###autoload
 (defun ai-code-pull-or-review-diff-file ()
   "Review a diff file with AI Code or generate one if not viewing a diff.
@@ -612,6 +619,35 @@ If not inside a Git repository, do nothing."
           (message "ai-code-update-git-ignore: no updates needed"))))))
 
 ;;;###autoload
+(defun ai-code--git-repo-recent-modified-files (base-dir limit)
+  "Return up to LIMIT most recently modified files under BASE-DIR.
+If BASE-DIR is in a Git repository, use `git ls-files' to enumerate files."
+  (let* ((git-root (magit-toplevel base-dir))
+         (root (or git-root base-dir))
+         (files (if git-root
+                    (mapcar (lambda (path)
+                              (expand-file-name path root))
+                            (magit-git-lines "ls-files"))
+                  (directory-files root t directory-files-no-dot-files-regexp)))
+         (file-times nil))
+    (dolist (file files)
+      (when (and (file-regular-p file)
+                 (not (ai-code--git-ignored-repo-file-p file root)))
+        (let* ((attrs (file-attributes file))
+               (mtime (file-attribute-modification-time attrs)))
+          (push (cons file mtime) file-times))))
+    (setq file-times (sort file-times
+                           (lambda (a b)
+                             (time-less-p (cdr b) (cdr a)))))
+    (let ((recent '())
+          (count 0))
+      (dolist (item file-times)
+        (when (< count limit)
+          (push (car item) recent)
+          (setq count (1+ count))))
+      (delete-dups (nreverse recent)))))
+
+;;;###autoload
 (defun ai-code-git-repo-recent-modified-files (prefix)
   "Open or insert one of the most recently modified files in the repo or current dir.
 With no PREFIX argument, prompt for a recently modified file and open it
@@ -623,43 +659,21 @@ buffer from which this command was invoked, instead of visiting the file."
   (interactive "P")
   (let* ((git-root (magit-toplevel))
          (base-dir (or git-root default-directory))
-         (files (if git-root
-                    (mapcar (lambda (path)
-                              (expand-file-name path git-root))
-                            (magit-git-lines "ls-files"))
-                  (directory-files base-dir t directory-files-no-dot-files-regexp)))
-         (file-times nil)
+         (files (ai-code--git-repo-recent-modified-files base-dir 20))
          (origin-buffer (current-buffer)))
-    (dolist (file files)
-      (when (file-regular-p file)
-        (let* ((attrs (file-attributes file))
-               (mtime (file-attribute-modification-time attrs)))
-          (push (cons file mtime) file-times))))
-    (if (not file-times)
+    (if (not files)
         (message "ai-code-git-repo-recent-modified-files: no files found")
-      (let* ((sorted (sort file-times
-                           (lambda (a b)
-                             (time-less-p (cdr b) (cdr a)))))
-             (top nil)
-             (count 0))
-        (dolist (item sorted)
-          (when (< count 20)
-            (push item top)
-            (setq count (1+ count))))
-        (setq top (nreverse top))
-        (if (not top)
-            (message "ai-code-git-repo-recent-modified-files: no files found")
-          (let* ((candidates (mapcar (lambda (item)
-                                       (file-relative-name (car item) base-dir))
-                                     top))
-                 (choice (completing-read "Recent modified file: "
-                                          candidates nil t)))
-            (unless (string= choice "")
-              (if prefix
-                  (when (buffer-live-p origin-buffer)
-                    (with-current-buffer origin-buffer
-                      (insert "@" choice)))
-                (find-file (expand-file-name choice base-dir))))))))))
+      (let* ((candidates (mapcar (lambda (file)
+                                   (file-relative-name file base-dir))
+                                 files))
+             (choice (completing-read "Recent modified file: "
+                                      candidates nil t)))
+        (unless (string= choice "")
+          (if prefix
+              (when (buffer-live-p origin-buffer)
+                (with-current-buffer origin-buffer
+                  (insert "@" choice)))
+            (find-file (expand-file-name choice base-dir))))))))
 
 (provide 'ai-code-git)
 
