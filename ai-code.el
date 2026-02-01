@@ -1,7 +1,7 @@
 ;;; ai-code.el --- Unified interface for AI coding CLI such as Claude Code, Codex CLI, Gemini CLI, Copilot CLI, Opencode, Grok CLI, etc -*- lexical-binding: t; -*-
 
 ;; Author: Kang Tu <tninja@gmail.com>
-;; Version: 1.22
+;; Version: 1.30
 ;; Package-Requires: ((emacs "28.1") (transient "0.8.0") (magit "2.1.0"))
 ;; URL: https://github.com/tninja/ai-code-interface.el
 
@@ -32,16 +32,16 @@
 ;;   ;; use codex as backend, other options are 'gemini, 'github-copilot-cli, 'opencode, 'grok, 'claude-code-ide, 'claude-code-el, 'claude-code, 'cursor, 'kiro
 ;;   (ai-code-set-backend 'codex) ;; set your preferred backend
 ;;   (global-set-key (kbd "C-c a") #'ai-code-menu)
-;;   ;; Optional: Enable @ file completion inside comments (when ai coding session opened)
-;;   ;; (ai-code-prompt-comment-filepath-completion-mode 1)
+;;   ;; Optional: Enable @ file completion in comments and AI sessions
+;;   (ai-code-prompt-filepath-completion-mode 1)
 ;;   (global-auto-revert-mode 1)
 ;;   (setq auto-revert-interval 1) ;; set to 1 second for faster update
-;;   ;; (global-set-key (kbd "C-c a C") #'ai-code-toggle-comment-filepath-completion))
+;;   )
 ;;
 ;; Key features:
 ;;   - Transient-driven Hub (C-c a) for all AI capabilities.
 ;;   - One key switching to different AI backend (C-c a s).
-;;   - Context-aware code actions (change code, implement TODOs, explain code).
+;;   - Context-aware code actions (change code, implement TODOs, explain code, @ completion).
 ;;   - Agile development workflows (TDD cycle, refactoring navigator, review helper).
 ;;   - Seamless prompt management using Org-mode.
 ;;   - AI-assisted bash commands and productivity utilities.
