@@ -300,7 +300,12 @@ NOTE: This does not handle file paths containing spaces."
   "Auto trigger file path completion when '@' is inserted."
   (when (and (not (minibufferp))
              (eq (char-before) ?@))
-    (completion-at-point)))
+    (let ((candidates (ai-code--prompt-filepath-candidates)))
+      (when candidates
+        (delete-char -1)  ; Remove the '@' we just typed
+        (let ((choice (completing-read "File: " candidates nil nil)))
+          (when (and choice (not (string-empty-p choice)))
+            (insert "@" choice)))))))
 
 (defun ai-code--insert-prompt (prompt-text)
   "Preprocess and insert PROMPT-TEXT into the AI prompt file.
