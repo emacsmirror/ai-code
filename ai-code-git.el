@@ -625,9 +625,10 @@ If BASE-DIR is in a Git repository, use `git ls-files' to enumerate files."
   (let* ((git-root (magit-toplevel base-dir))
          (root (or git-root base-dir))
          (files (if git-root
-                    (mapcar (lambda (path)
-                              (expand-file-name path root))
-                            (magit-git-lines "ls-files"))
+                    (let ((default-directory root))
+                      (mapcar (lambda (path)
+                                (expand-file-name path root))
+                              (magit-git-lines "ls-files")))
                   (directory-files root t directory-files-no-dot-files-regexp)))
          (file-times nil))
     (dolist (file files)
