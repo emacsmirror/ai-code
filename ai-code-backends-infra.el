@@ -222,6 +222,8 @@ Activity tracking for notifications is handled separately by
     (setq-local vterm--redraw-immididately nil))
   (when (fboundp 'ai-code--session-handle-at-input)
     (local-set-key (kbd "@") #'ai-code--session-handle-at-input))
+  (when (fboundp 'ai-code--session-handle-hash-input)
+    (local-set-key (kbd "#") #'ai-code--session-handle-hash-input))
   (setq-local cursor-in-non-selected-windows nil)
   (setq-local blink-cursor-mode nil)
   (setq-local cursor-type nil)
@@ -659,6 +661,8 @@ ENV-VARS is a list of environment variables."
           (unless (eq major-mode 'eat-mode) (eat-mode))
           (when (fboundp 'ai-code--session-handle-at-input)
             (local-set-key (kbd "@") #'ai-code--session-handle-at-input))
+          (when (fboundp 'ai-code--session-handle-hash-input)
+            (local-set-key (kbd "#") #'ai-code--session-handle-hash-input))
           (setq-local process-environment (append env-vars process-environment))
           (eat-exec buffer buffer-name program nil args)
           ;; Add process filter to track activity for notifications
