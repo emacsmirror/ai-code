@@ -50,7 +50,7 @@ Enable installation of packages from MELPA by adding an entry to package-archive
     ;; Enable global keybinding for the main menu
     (global-set-key (kbd "C-c a") #'ai-code-menu)
     ;; Optional: Use eat if you prefer, by default it is vterm
-    ;; (setq ai-code-backends-infra-terminal-backend 'eat) ;; for openai codex, github copilot cli, opencode, grok, cursor-cli; for claude-code-ide.el, you can check their config
+    ;; (setq ai-code-backends-infra-terminal-backend 'eat) ;; the way to config all native supported CLI. for external backend such as claude-code-ide.el and claude-code.el, please check their config
     ;; Optional: Enable @ file completion in comments and AI sessions
     (ai-code-prompt-filepath-completion-mode 1)
     ;; Optional: Turn on auto-revert buffer, so that the AI code change automatically appears in the buffer
@@ -124,7 +124,6 @@ The generated prompt will include the function/region scope, visible file list, 
   - [[https://github.com/sooperset/mcp-atlassian][Atlassian MCP]]
   - [[https://github.com/crystaldba/postgres-mcp][Postgresql MCP]] / Sqlite MCP
   - [[https://github.com/docker/mcp-gateway][Docker]] / [[https://github.com/containers/kubernetes-mcp-server][Kubernetes]] MCP
-  - [[https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking][Sequential Thinking MCP]]
 
 *** Desktop Notifications (Experimental)
 
@@ -160,7 +159,7 @@ When working with multiple AI sessions, it can be useful to receive desktop noti
    - The selection updates the start/switch/send commands and the CLI used by `ai-code-apply-prompt-on-current-file`.
 
    Natively supported options:
-   - Claude Code (`[[./ai-code-claude-code.el][ai-code-claude-code.el]]`)
+   - [[https://github.com/anthropics/claude-code][Claude Code]] (`[[./ai-code-claude-code.el][ai-code-claude-code.el]]`)
    - [[https://github.com/google-gemini/gemini-cli][Gemini CLI]] (`[[./ai-code-gemini-cli.el][ai-code-gemini-cli.el]]`)
    - [[https://github.com/openai/codex][OpenAI codex CLI]] (`[[./ai-code-codex-cli.el][ai-code-codex-cli.el]]`)
    - [[https://docs.github.com/en/copilot/how-tos/use-copilot-agents/use-copilot-cli][GitHub Copilot CLI]] (`[[./ai-code-github-copilot-cli.el][ai-code-github-copilot-cli.el]]`)
