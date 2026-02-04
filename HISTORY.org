@@ -2,6 +2,7 @@
 * Release history
 
 ** Main branch change
+- Feat: In AI coding session buffers, SPC in Evil normal state now triggers the prompt-entry UI
 
 - Feat: Add CodeBuddy Code CLI backend support, by liaohanqin & CodeBuddy
 - Feat: Add # class / function name completion in AI prompts, comments and AI coding session
