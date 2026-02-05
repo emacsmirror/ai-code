@@ -218,18 +218,76 @@ NOTE: This does not handle file paths containing spaces."
   "Return FILE relative to GIT-ROOT-TRUENAME, prefixed with '@'."
   (concat "@" (file-relative-name (file-truename file) git-root-truename)))
 
-(defun ai-code--visible-window-files (git-root-truename)
-  "Return visible window file list under GIT-ROOT-TRUENAME."
+(defun ai-code--normalize-path (file)
+  "Return normalized absolute path for FILE.
+If FILE exists, return its truename. Otherwise return expanded path."
+  (let ((full (expand-file-name file)))
+    (if (file-exists-p full)
+        (file-truename full)
+      full)))
+
+(defun ai-code--candidate-path (file git-root-truename)
+  "Return completion candidate for FILE.
+Return '@'-prefixed path relative to GIT-ROOT-TRUENAME when FILE is under
+that root, otherwise return the absolute path."
+  (let ((full-truename (ai-code--normalize-path file)))
+    (if (string-prefix-p git-root-truename full-truename)
+        (ai-code--relative-filepath full-truename git-root-truename)
+      full-truename)))
+
+(defun ai-code--current-frame-dired-paths (git-root-truename)
+  "Return dired directory candidates from current frame under GIT-ROOT-TRUENAME."
+  (let ((paths '()))
+    (dolist (win (window-list nil 'no-minibuffer))
+      (with-current-buffer (window-buffer win)
+        (when (derived-mode-p 'dired-mode)
+          (let ((dir (if (fboundp 'dired-current-directory)
+                         (dired-current-directory)
+                       default-directory)))
+            (when (and dir
+                       (file-directory-p dir)
+                       (string-prefix-p git-root-truename
+                                        (file-truename dir))
+                       (not (ai-code--git-ignored-repo-file-p
+                             dir
+                             git-root-truename)))
+              (push (ai-code--relative-filepath dir
+                                                git-root-truename)
+                    paths))))))
+    (nreverse (delete-dups paths))))
+
+(defun ai-code--visible-window-files ()
+  "Return files from visible windows in current frame."
   (let ((files '())
         (selected (selected-window)))
     (dolist (win (cons selected
                        (delq selected (window-list nil 'no-minibuffer))))
-      (let* ((buf (window-buffer win))
-             (file (buffer-file-name buf)))
-        (when (and (ai-code--file-in-git-repo-p file git-root-truename)
-                   (not (ai-code--git-ignored-repo-file-p file git-root-truename)))
+      (let ((file (buffer-file-name (window-buffer win))))
+        (when file
           (push file files))))
     (nreverse (delete-dups files))))
+
+(defun ai-code--recent-buffer-paths (git-root-truename)
+  "Return candidate paths for most recent 5 visited buffer files or directories."
+  (let ((files '())
+        (count 0))
+    (dolist (buf (buffer-list))
+      (when (< count 5)
+        (with-current-buffer buf
+          (if (derived-mode-p 'dired-mode)
+              (let ((dir (if (fboundp 'dired-current-directory)
+                             (dired-current-directory)
+                           default-directory)))
+                (when dir
+                  (push dir files)
+                  (setq count (1+ count))))
+            (let ((file (buffer-file-name buf)))
+              (when file
+                (push file files)
+                (setq count (1+ count))))))))
+    (mapcar (lambda (file)
+              (ai-code--candidate-path file git-root-truename))
+            (nreverse files))))
 
 (defun ai-code--buffer-file-list (git-root-truename &optional skip-files)
   "Return buffer file list under GIT-ROOT-TRUENAME, skipping SKIP-FILES."
@@ -262,39 +320,28 @@ NOTE: This does not handle file paths containing spaces."
     (let* ((git-root-truename (file-truename git-root))
            (current-file (buffer-file-name (current-buffer)))
            (current-frame-dired-paths
-            (let ((paths '()))
-              (dolist (win (window-list nil 'no-minibuffer))
-                (with-current-buffer (window-buffer win)
-                  (when (derived-mode-p 'dired-mode)
-                    (let ((dir (if (fboundp 'dired-current-directory)
-                                   (dired-current-directory)
-                                 default-directory)))
-                      (when (and dir
-                                 (file-directory-p dir)
-                                 (string-prefix-p git-root-truename
-                                                  (file-truename dir))
-                                 (not (ai-code--git-ignored-repo-file-p
-                                       dir
-                                       git-root-truename)))
-                        (push (ai-code--relative-filepath dir
-                                                          git-root-truename)
-                              paths))))))
-              (nreverse (delete-dups paths))))
-           (visible-files (ai-code--visible-window-files git-root-truename))
-           (skip-files (mapcar #'file-truename visible-files))
+            (ai-code--current-frame-dired-paths git-root-truename))
+           (visible-files (ai-code--visible-window-files))
+           (skip-files (mapcar #'ai-code--normalize-path visible-files))
            (buffer-files (ai-code--buffer-file-list git-root-truename skip-files))
            (recent-files (ai-code--repo-recent-files git-root-truename))
            (ignore-prefix (concat "@" ai-code-files-dir-name "/"))
            (visible-paths (mapcar (lambda (file)
-                                    (ai-code--relative-filepath file git-root-truename))
+                                    (ai-code--candidate-path file git-root-truename))
                                   visible-files))
+           (recent-buffer-paths
+            (ai-code--recent-buffer-paths git-root-truename))
            (buffer-paths (mapcar (lambda (file)
-                                   (ai-code--relative-filepath file git-root-truename))
+                                   (ai-code--candidate-path file git-root-truename))
                                  buffer-files))
            (recent-paths (mapcar (lambda (file)
-                                   (ai-code--relative-filepath file git-root-truename))
+                                   (ai-code--candidate-path file git-root-truename))
                                  recent-files))
-           (combined (append current-frame-dired-paths visible-paths buffer-paths recent-paths))
+           (combined (append current-frame-dired-paths
+                             visible-paths
+                             recent-buffer-paths
+                             buffer-paths
+                             recent-paths))
            (deduped (ai-code--dedupe-preserve-order combined))
            (filtered '()))
       (dolist (item deduped)
