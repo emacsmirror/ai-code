@@ -127,6 +127,8 @@ The generated prompt will include the function/region scope, visible file list, 
   - [[https://github.com/crystaldba/postgres-mcp][Postgresql MCP]] / Sqlite MCP
   - [[https://github.com/docker/mcp-gateway][Docker]] / [[https://github.com/containers/kubernetes-mcp-server][Kubernetes]] MCP
 
+- [[https://martinfowler.com/articles/exploring-gen-ai/context-engineering-coding-agents.html][Context Engineering for Coding Agents]], recommended by Martin Fowler.
+
 *** Desktop Notifications (Experimental)
 
 When working with multiple AI sessions, it can be useful to receive desktop notifications when AI responses are complete. This is especially helpful when you prompt an AI and then switch to other tasks while waiting for the response.
