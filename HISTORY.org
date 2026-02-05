@@ -2,6 +2,7 @@
 * Release history
 
 ** Main branch change
+- Chore: Add session id field to task file template, for tracking / recovering purpose
 
 ** 1.40
 - Chore: Enhance candidate filepath list for @ character
