@@ -2,6 +2,9 @@
 * Release history
 
 ** Main branch change
+- Chore: Enhance candidate filepath list for @ character
+  - visible files logic support out of repo file
+  - recent focused buffer file or dir in candidate list
 - Feat: In AI coding session buffers, SPC in Evil normal state now triggers the prompt-entry UI
 
 - Feat: Add CodeBuddy Code CLI backend support, by liaohanqin & CodeBuddy
