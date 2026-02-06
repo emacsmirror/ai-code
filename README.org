@@ -18,6 +18,7 @@ An Emacs interface for AI-assisted software development. *The purpose is to prov
   - [[https://docs.cursor.com/en/cli][Cursor CLI]]
   - [[https://kiro.dev/cli/][Kiro CLI]]
   - [[https://cnb.cool/codebuddy/codebuddy-code][CodeBuddy Code CLI]]
+  - [[https://aider.chat/][Aider CLI]]
 
 - I switch between different CLI-based AI tools in Emacs: Claude Code / OpenAI Codex / Gemini CLI / etc. If you also use different AI tools inside Emacs, but want to keep the same user interface and experience, this package is for you.
 
@@ -45,7 +46,7 @@ Enable installation of packages from MELPA by adding an entry to package-archive
   (use-package ai-code
     ;; :straight (:host github :repo "tninja/ai-code-interface.el") ;; if you want to use straight to install, no need to have MELPA setting above
     :config
-    ;; use codex as backend, other options are 'claude-code, 'gemini, 'github-copilot-cli, 'opencode, 'grok, 'cursor, 'kiro, 'codebuddy, 'claude-code-ide, 'claude-code-el
+    ;; use codex as backend, other options are 'claude-code, 'gemini, 'github-copilot-cli, 'opencode, 'grok, 'cursor, 'kiro, 'codebuddy, 'aider, 'claude-code-ide, 'claude-code-el
     (ai-code-set-backend 'codex)
     ;; Enable global keybinding for the main menu
     (global-set-key (kbd "C-c a") #'ai-code-menu)
@@ -90,7 +91,7 @@ Enable installation of packages from MELPA by adding an entry to package-archive
 - *Context-Aware Code Actions*: The menu exposes dedicated entries for changing code (`c`), implementing TODOs (`i`), asking questions (`q`), explaining code (`x`), sending free-form commands (`<SPC>`), and refreshing AI context (`@`). Each command automatically captures the surrounding function, region, or clipboard contents (via `C-u`) to keep prompts precise.
 - *Agile Development Workflows*: Use the refactoring navigator (`r`), the guided TDD cycle (`t`), and the pull/review diff helper (`v`) to keep AI-assisted work aligned with agile best practices. Prompt authoring is first-class through quick access to the prompt file (`p`), block sending (`b`), and AI-assisted shell/file execution (`!`).
 - *Productivity & Debugging Utilities*: Initialize project navigation assets (`.`), investigate exceptions (`e`), auto-fix Flycheck issues in scope (`f`), copy or open file paths formatted for prompts (`k`, `o`), generate MCP inspector commands (`m`), capture session notes straight into Org (`n`), and toggle desktop notifications (`N`) to get alerted when AI responses are ready in background sessions.
-- *Seamless Prompt Management*: Open `.ai.code.prompt.org`, send regions with `ai-code-prompt-send-block`, and reuse prompt snippets via `yasnippet` to keep conversations organized.
+- *Seamless Prompt Management*: Open the prompt file via `ai-code-open-prompt-file` (stored under `.ai.code.files/.ai.code.prompt.org` by default), send regions with `ai-code-prompt-send-block`, and reuse prompt snippets via `yasnippet` to keep conversations organized.
 - *Interactive Chat & Context Tools*: Dedicated buffers hold long-running chats, automatically enriched with file paths, diffs, and history from Magit or Git commands for richer AI responses.
 - *AI-Assisted Bash Commands*: From Dired, shell, eshell, or vterm, run `C-c a !` and type natural-language commands prefixed with `:` (e.g., `:count lines of python code recursively`); the tool generates the shell command for review and executes it in a compile buffer.
 
@@ -114,6 +115,7 @@ This package makes context engineering easy by automatically assembling precise 
 - Optional clipboard context: prefix with `C-u` to append clipboard content to prompts for external snippets or logs.
 - @-triggered filepath completion in comments and AI sessions. Type `@` to open a completion list of recent and visible repo files, then select a path to insert.
 - Prompt suffix guardrails: set `ai-code-prompt-suffix` to append persistent constraints to every prompt (when `ai-code-use-prompt-suffix` is non-nil). Example: `(setq ai-code-prompt-suffix "Only use English in code file, but Reply in Simplified Chinese language")`.
+- Optional GPTel headline generation: set `ai-code-use-gptel-headline` to auto-generate prompt headings with GPTel.
 
 Example (focused refactor with curated context):
 1) In a buffer, run `C-c a @` to add the current function or selected region to stored repo context.
@@ -145,7 +147,7 @@ When working with multiple AI sessions, it can be useful to receive desktop noti
 
 **** How It Works
 - The package monitors terminal activity in AI session buffers.
-- When the terminal has been idle for ~1.5 seconds (configurable via `ai-code-backends-infra-idle-delay`), it's considered a completed response.
+- When the terminal has been idle for ~5 seconds (configurable via `ai-code-backends-infra-idle-delay`), it's considered a completed response.
 - If the AI session buffer is not currently visible/focused, a desktop notification is sent.
 - Notifications are throttled to avoid spam (minimum 2 seconds between notifications).
 
@@ -172,6 +174,7 @@ When working with multiple AI sessions, it can be useful to receive desktop noti
    - [[https://docs.cursor.com/en/cli][Cursor CLI]] (`[[./ai-code-cursor-cli.el][ai-code-cursor-cli.el]]`)
    - [[https://kiro.dev/cli/][Kiro CLI]] (`[[./ai-code-kiro-cli.el][ai-code-kiro-cli.el]]`)
    - [[https://cnb.cool/codebuddy/codebuddy-code][CodeBuddy Code CLI]] (`[[./ai-code-codebuddy-cli.el][ai-code-codebuddy-cli.el]]`)
+   - [[https://aider.chat/][Aider CLI]] (`[[./ai-code-aider-cli.el][ai-code-aider-cli.el]]`)
    
    It also supports external backends through customization of the `ai-code-backends` variable; currently it includes:
    - Claude Code IDE (`[[https://github.com/manzaltu/claude-code-ide.el][claude-code-ide.el]]`)
