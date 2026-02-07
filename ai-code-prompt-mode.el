@@ -15,6 +15,8 @@
 
 (defvar ai-code-use-gptel-headline)
 (defvar ai-code-prompt-suffix)
+(defvar ai-code-test-after-code-change)
+(defvar ai-code-test-after-code-change-suffix)
 (defvar ai-code-use-prompt-suffix)
 
 (declare-function yas-load-directory "yasnippet" (dir))
@@ -164,8 +166,13 @@ Returns the full prompt text with suffix for sending to AI."
 
 (defun ai-code--write-prompt-to-file-and-send (prompt-text)
   "Write PROMPT-TEXT to the AI prompt file."
-  (let* ((full-prompt (concat (if (and ai-code-use-prompt-suffix ai-code-prompt-suffix)
-                                  (concat prompt-text "\n" ai-code-prompt-suffix)
+  (let* ((suffix-parts (delq nil (list ai-code-prompt-suffix
+                                       (when ai-code-test-after-code-change
+                                         ai-code-test-after-code-change-suffix))))
+         (suffix (when (and ai-code-use-prompt-suffix suffix-parts)
+                   (mapconcat #'identity suffix-parts "\n")))
+         (full-prompt (concat (if suffix
+                                  (concat prompt-text "\n" suffix)
                                 prompt-text) "\n"))
          (prompt-file (ai-code--get-ai-code-prompt-file-path))
          (original-default-directory default-directory))
@@ -518,9 +525,9 @@ using GPTel, and creates the task file."
           (insert (format "#+DATE: %s\n" (format-time-string "%Y-%m-%d")))
           (unless (string-empty-p task-url)
             (insert (format "#+URL: %s\n" task-url)))
-          (let* ((label (ai-code-current-backend-label))
-                 (field (upcase (replace-regexp-in-string "[^A-Za-z0-9]+" "_" label))))
-            (insert (format "#+%s_SESSION_ID: <Usually you can get the session id with /status or /stat in AI coding window>\n" field)))
+          (let ((label (ai-code-current-backend-label)))
+            (insert (format "#+AGENT: %s\n" label))
+            (insert "#+SESSION_ID: <Usually you can get the session id with /status or /stat in AI coding window>\n"))
           (insert "\n* Task Description\n\n")
           (insert task-name)
           (insert "\n\n* Investigation\n\n")
