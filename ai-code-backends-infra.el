@@ -628,7 +628,7 @@ When PREFIX and WORKING-DIR are provided, select from multiple sessions."
         (with-current-buffer buffer
           (ai-code-backends-infra--remember-session-buffer prefix working-dir buffer)
           (ai-code-backends-infra--terminal-send-string line)
-          (sit-for 0.1)
+          (sit-for 0.5) ;; 0.1 might be too low for some cli backends such as github copilot cli
           (ai-code-backends-infra--terminal-send-return))
       (user-error "%s" missing-message))))
 
