@@ -83,7 +83,7 @@ Enable installation of packages from MELPA by adding an entry to package-archive
   - ai-code-use-gptel-headline: When non-nil, prompts sent to the AI will have auto-generated headlines created by GPTel, providing better organization and readability in the prompt file
 - `flycheck`: To enable the `ai-code-flycheck-fix-errors-in-scope` command.
 - `yasnippet`: For snippet support in the prompt file. A library of snippets is included.
-  - (emacs built-in) abbrev + skeleton is also a good way to expand prompt. [[./etc/prompt_expand_with_abbrev_skeleton.el][example code]]
+  - (emacs built-in) abbrev + skeleton is also a good way to expand prompt. [[./etc/prompt_expand_with_abbrev_skeleton.el][example abbrev to solve / iterate leetcode problem with tdd (need to set ai-code-auto-test-type with tdd)]]
 - `projectile`: For project root initialization.
 - `helm-gtags`: For tags creation.
 - `python-pytest`: For running python tests in the TDD workflow.
@@ -141,7 +141,7 @@ The generated prompt will include the function/region scope, visible file list, 
 
 Use the prompt suffix and TDD helpers to keep a tight build + test loop. This reduces context switching, shortens the time between a change and verified feedback, and lets the AI work more independently with less human-in-the-loop effort:
 
-- `ai-code-auto-test-type`: Selects how prompts request tests after code changes (test-after-change, TDD Red+Green, or off).
+- `ai-code-auto-test-type`: Selects how prompts request tests after code changes (test-after-change, TDD Red+Green, off, or ask me).
 - `ai-code--tdd-red-green-stage`: Generates a single prompt for Red + Green with explicit test follow-up.
 - `ai-code-build-or-test-project`: Run the project build or test from the menu (`C-c a b`).
 

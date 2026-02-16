@@ -14,3 +14,5 @@ Two games were written with the assistance of aider / aider.el
   - all using Claude model
 
 - These games are CLI-based text games. In the future, I plan to create graphical versions using pygame, with the help of aider and aider.el
+
+- leetcode: resolve problem with single prompt, using TDD mode
