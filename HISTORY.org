@@ -2,6 +2,7 @@
 * Release history
 
 ** Main branch change
+- Fix: ai-code-prompt-send-block
 - Feat: Add repo-local backend affinity to persist AI code backend per Git repo
 
 ** 1.52
