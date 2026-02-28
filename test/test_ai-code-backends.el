@@ -192,6 +192,97 @@
       (should (equal (reverse start-calls)
                      '(backend-a backend-b backend-a))))))
 
+(ert-deftest ai-code-test-install-skills-with-string-command ()
+  "Backend with :install-skills string runs it via compile."
+  (let* ((compiled-cmd nil)
+         (ai-code-backends '((test-backend
+                               :label "Test Backend"
+                               :install-skills "npm install skills"
+                               :cli "test")))
+         (ai-code-selected-backend 'test-backend))
+    (cl-letf (((symbol-function 'compile)
+               (lambda (cmd) (setq compiled-cmd cmd)))
+              ((symbol-function 'message)
+               (lambda (&rest _args) nil)))
+      (ai-code-install-backend-skills)
+      (should (string= compiled-cmd "npm install skills")))))
+
+(ert-deftest ai-code-test-install-skills-with-function-symbol ()
+  "Backend with :install-skills as function symbol calls that function."
+  (let* ((fn-called nil)
+         (ai-code-backends '((test-backend
+                               :label "Test Backend"
+                               :install-skills ai-code-test--install-skills-fn
+                               :cli "test")))
+         (ai-code-selected-backend 'test-backend))
+    (cl-letf (((symbol-function 'ai-code-test--install-skills-fn)
+               (lambda () (setq fn-called t)))
+              ((symbol-function 'message)
+               (lambda (&rest _args) nil)))
+      (ai-code-install-backend-skills)
+      (should fn-called))))
+
+(ert-deftest ai-code-test-install-skills-fallback-when-nil ()
+  "Backend without :install-skills falls back to prompting AI via send-command."
+  (let* ((sent-command nil)
+         (ai-code-backends '((test-backend
+                               :label "Test Backend"
+                               :cli "test")))
+         (ai-code-selected-backend 'test-backend))
+    (cl-letf (((symbol-function 'read-string)
+               (lambda (_prompt &optional _initial _history _default &rest _rest)
+                 "https://github.com/obra/superpowers"))
+              ((symbol-function 'ai-code-cli-send-command)
+               (lambda (cmd) (setq sent-command cmd)))
+              ((symbol-function 'message)
+               (lambda (&rest _args) nil)))
+      (ai-code-install-backend-skills)
+      (should (stringp sent-command))
+      (should (string-match-p "superpowers" sent-command))
+      (should (string-match-p "README" sent-command)))))
+
+(ert-deftest ai-code-test-install-skills-no-backend-errors ()
+  "Missing backend signals user-error."
+  (let ((ai-code-selected-backend 'nonexistent-backend)
+        (ai-code-backends nil))
+    (should-error (ai-code-install-backend-skills)
+                  :type 'user-error)))
+
+(ert-deftest ai-code-test-claude-code-install-skills-sends-prompt ()
+  "Claude Code install-skills function prompts for URL and sends a Claude-specific prompt."
+  (let* ((sent-command nil)
+         (prompted-url nil))
+    (cl-letf (((symbol-function 'read-string)
+               (lambda (_prompt &optional _initial _history _default &rest _rest)
+                 (setq prompted-url t)
+                 "https://github.com/obra/superpowers"))
+              ((symbol-function 'ai-code-cli-send-command)
+               (lambda (cmd) (setq sent-command cmd)))
+              ((symbol-function 'message)
+               (lambda (&rest _args) nil)))
+      (ai-code-claude-code-install-skills)
+      (should prompted-url)
+      (should (stringp sent-command))
+      (should (string-match-p "superpowers" sent-command))
+      (should (string-match-p "skill" sent-command)))))
+
+(ert-deftest ai-code-test-install-skills-errors-on-non-callable-symbol ()
+  "Backend with :install-skills as undefined symbol signals user-error."
+  (let* ((ai-code-backends '((test-backend
+                               :label "Test Backend"
+                               :install-skills ai-code-test-nonexistent-install-fn
+                               :cli "test")))
+         (ai-code-selected-backend 'test-backend))
+    (should-error (ai-code-install-backend-skills)
+                  :type 'user-error)))
+
+(ert-deftest ai-code-test-claude-code-backend-has-install-skills ()
+  "Claude Code backend spec should have :install-skills set to the dedicated function."
+  (let ((spec (ai-code--backend-spec 'claude-code)))
+    (should spec)
+    (should (eq (plist-get (cdr spec) :install-skills)
+                'ai-code-claude-code-install-skills))))
+
 (provide 'test_ai-code-backends)
 
 ;;; test_ai-code-backends.el ends here

@@ -175,6 +175,19 @@ When called from Lisp code, sends CMD directly without prompting."
   (interactive "sClaude command: ")
   (claude-code--do-send-command cmd))
 
+(defun ai-code-claude-code-install-skills ()
+  "Install skills for Claude Code by prompting for a skills repo URL.
+Ask the Claude Code CLI to clone and set up the skills from the given
+repository.  Claude Code manages skills as files under ~/.claude/,
+so the CLI itself handles the installation details."
+  (let* ((url (read-string
+               "Skills repo URL for Claude Code: "
+               nil nil "https://github.com/obra/superpowers"))
+         (prompt (format
+                  "Install the skill from %s for this Claude Code CLI. Read the repository README to understand the installation instructions and follow them. Set up the skill files under the appropriate directory (e.g. ~/.claude/ or the project .claude/ directory) so they are available in future sessions."
+                  url)))
+    (ai-code-cli-send-command prompt)))
+
 ;;;###autoload
 (defcustom ai-code-backends
   '((claude-code
@@ -187,6 +200,7 @@ When called from Lisp code, sends CMD directly without prompting."
      :config  "~/.claude.json"
      :agent-file "CLAUDE.md"
      :upgrade "npm install -g @anthropic-ai/claude-code@latest"
+     :install-skills ai-code-claude-code-install-skills
      :cli     "claude")
     (gemini
      :label "Gemini CLI"
@@ -198,6 +212,7 @@ When called from Lisp code, sends CMD directly without prompting."
      :config  "~/.gemini/settings.json"
      :agent-file "GEMINI.md"
      :upgrade "npm install -g @google/gemini-cli"
+     :install-skills nil
      :cli     "gemini")
     (github-copilot-cli
      :label "GitHub Copilot CLI"
@@ -207,7 +222,9 @@ When called from Lisp code, sends CMD directly without prompting."
      :send    ai-code-github-copilot-cli-send-command
      :resume  ai-code-github-copilot-cli-resume
      :config  "~/.copilot/mcp-config.json"
+     :agent-file nil
      :upgrade "npm install -g @github/copilot"
+     :install-skills nil
      :cli     "copilot")
     (codex
      :label "OpenAI Codex CLI"
@@ -219,6 +236,7 @@ When called from Lisp code, sends CMD directly without prompting."
      :config  "~/.codex/config.toml"
      :agent-file "AGENTS.md"
      :upgrade "npm install -g @openai/codex@latest"
+     :install-skills nil
      :cli     "codex")
     (opencode
      :label "Opencode"
@@ -228,7 +246,9 @@ When called from Lisp code, sends CMD directly without prompting."
      :send    ai-code-opencode-send-command
      :resume  ai-code-opencode-resume
      :config  "~/.config/opencode/opencode.jsonc"
+     :agent-file nil
      :upgrade "npm i -g opencode-ai@latest"
+     :install-skills nil
      :cli     "opencode")
     (grok
      :label "Grok CLI"
@@ -238,7 +258,9 @@ When called from Lisp code, sends CMD directly without prompting."
      :send    ai-code-grok-cli-send-command
      :resume  ai-code-grok-cli-resume
      :config  "~/.config/grok/config.json"
+     :agent-file nil
      :upgrade "bun add -g @vibe-kit/grok-cli"
+     :install-skills nil
      :cli     "grok")
     (cursor
      :label "Cursor CLI"
@@ -248,7 +270,9 @@ When called from Lisp code, sends CMD directly without prompting."
      :send    ai-code-cursor-cli-send-command
      :resume  ai-code-cursor-cli-resume
      :config  "~/.cursor"
+     :agent-file nil
      :upgrade "cursor-agent update"
+     :install-skills nil
      :cli     "cursor-agent")
     (kiro
      :label "Kiro CLI"
@@ -258,7 +282,9 @@ When called from Lisp code, sends CMD directly without prompting."
      :send    ai-code-kiro-cli-send-command
      :resume  ai-code-kiro-cli-resume
      :config  "~/.kiro/settings/cli.json"
+     :agent-file nil
      :upgrade "kiro-cli update"
+     :install-skills nil
      :cli     "kiro-cli")
     (codebuddy
      :label "CodeBuddy Code"
@@ -268,7 +294,9 @@ When called from Lisp code, sends CMD directly without prompting."
      :send    ai-code-codebuddy-cli-send-command
      :resume  ai-code-codebuddy-cli-resume
      :config  "~/.codebuddy"
+     :agent-file nil
      :upgrade "codebuddy update"
+     :install-skills nil
      :cli     "codebuddy")
     (aider
      :label "Aider CLI"
@@ -278,9 +306,11 @@ When called from Lisp code, sends CMD directly without prompting."
      :send    ai-code-aider-cli-send-command
      :resume  nil
      :config  "~/.aider.conf.yml"
+     :agent-file nil
      :upgrade nil
+     :install-skills nil
      :cli     "aider")
-    (agent-shell  ; external backend, requires agent-shell package
+    (agent-shell      ; external backend, requires agent-shell package
      :label "agent-shell"
      :require ai-code-agent-shell
      :start   ai-code-agent-shell
@@ -288,10 +318,11 @@ When called from Lisp code, sends CMD directly without prompting."
      :send    ai-code-agent-shell-send-command
      :resume  ai-code-agent-shell-resume
      :config  nil
+     :agent-file nil
      :upgrade nil
-     :cli     "agent-shell"
-     :agent-file nil)
-    (claude-code-ide  ; external backend, requires claude-code-ide.el package
+     :install-skills nil
+     :cli     "agent-shell")
+    (claude-code-ide ; external backend, requires claude-code-ide.el package
      :label "claude-code-ide.el"
      :require claude-code-ide
      :start   claude-code-ide--start-if-no-session
@@ -301,8 +332,9 @@ When called from Lisp code, sends CMD directly without prompting."
      :config  "~/.claude.json"
      :agent-file "CLAUDE.md"
      :upgrade "npm install -g @anthropic-ai/claude-code@latest"
+     :install-skills nil
      :cli     "claude")
-    (claude-code-el  ; external backend, requires claude-code.el package
+    (claude-code-el ; external backend, requires claude-code.el package
      :label "claude-code.el"
      :require claude-code
      :start   claude-code
@@ -312,11 +344,14 @@ When called from Lisp code, sends CMD directly without prompting."
      :config  "~/.claude.json"
      :agent-file "CLAUDE.md"
      :upgrade "npm install -g @anthropic-ai/claude-code@latest"
+     :install-skills nil
      :cli     "claude"))
   "Available AI backends and how to integrate with them.
 Each entry is (KEY :label STRING :require FEATURE :start FN :switch FN
-:send FN :resume FN-or-nil :upgrade STRING-or-nil :cli STRING :agent-file STRING-or-nil).
-The :upgrade property can be either a string shell command or nil."
+:send FN :resume FN-or-nil :upgrade STRING-or-nil :cli STRING
+:agent-file STRING-or-nil :install-skills STRING-or-SYMBOL-or-nil).
+The :upgrade property can be either a string shell command or nil.
+The :install-skills property can be a string shell command, a function symbol, or nil."
   :type '(repeat (list (symbol :tag "Key")
                        (const :label) (string :tag "Label")
                        (const :require) (symbol :tag "Feature to require")
@@ -329,7 +364,10 @@ The :upgrade property can be either a string shell command or nil."
                                                 (const :tag "Not supported" nil))
                        (const :cli) (string :tag "CLI name")
                        (const :agent-file) (choice (string :tag "Agent file name")
-                                                   (const :tag "Not supported" nil))))
+                                                   (const :tag "Not supported" nil))
+                       (const :install-skills) (choice (string :tag "Install skills command")
+                                                       (symbol :tag "Install skills function")
+                                                       (const :tag "Not supported" nil))))
   :group 'ai-code)
 
 (defvar ai-code-selected-backend 'claude-code
@@ -495,6 +533,45 @@ invoke `ai-code-cli-resume'; otherwise call `ai-code-cli-start'."
               (message "Running upgrade command for %s" label))
           (user-error "Upgrade command for backend '%s' is not defined"
                       label))))))
+
+(defun ai-code--install-backend-skills-fallback (label)
+  "Fallback skills installation for backend LABEL.
+Prompt user for a skills repository URL and ask the AI CLI session
+to read the repo README and install the skills."
+  (let* ((url (read-string
+               (format "Skills repo URL for %s: " label)
+               nil nil "https://github.com/obra/superpowers"))
+         (prompt (format "Please read the README of %s and install/setup the skills described there for this CLI. Follow the installation instructions in the README." url)))
+    (ai-code-cli-send-command prompt)))
+
+;;;###autoload
+(defun ai-code-install-backend-skills ()
+  "Install skills for the currently selected backend.
+If the backend defines an :install-skills property, use it:
+  - string: run as a shell command via `compile'.
+  - symbol: call the function.
+Otherwise fall back to prompting the AI session to install from a
+skills repository URL."
+  (interactive)
+  (let* ((spec (ai-code--backend-spec ai-code-selected-backend)))
+    (if (not spec)
+        (user-error "No backend is currently selected")
+      (ai-code--ensure-backend-loaded spec)
+      (let* ((plist (cdr spec))
+             (install-skills (plist-get plist :install-skills))
+             (label (ai-code-current-backend-label)))
+        (cond
+         ((stringp install-skills)
+          (compile install-skills)
+          (message "Running skills installation for %s" label))
+         ((and install-skills (symbolp install-skills) (fboundp install-skills))
+          (funcall install-skills)
+          (message "Running skills installation for %s" label))
+         ((and install-skills (symbolp install-skills) (not (fboundp install-skills)))
+          (user-error "Backend '%s' declares :install-skills function '%s' but it is not callable"
+                      label install-skills))
+         (t
+          (ai-code--install-backend-skills-fallback label)))))))
 
 (provide 'ai-code-backends)
 
