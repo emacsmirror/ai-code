@@ -188,9 +188,11 @@ so the CLI itself handles the installation details."
           (format
            "Install the skill from %s for this Claude Code CLI. Read the repository README to understand the installation instructions and follow them. Set up the skill files under the appropriate directory (e.g. ~/.claude/ or the project .claude/ directory) so they are available in future sessions."
            url))
-         (prompt (ai-code-read-string
-                  "Edit install-skills prompt for Claude Code: "
-                  default-prompt)))
+         (prompt (if (called-interactively-p 'interactive)
+                     (ai-code-read-string
+                      "Edit install-skills prompt for Claude Code: "
+                      default-prompt)
+                   default-prompt)))
     (ai-code-cli-send-command prompt)))
 
 ;;;###autoload
@@ -550,9 +552,11 @@ to read the repo README and install the skills."
           (format
            "Please read the README of %s and install/setup the skills described there for %s. Follow the installation instructions in the README."
            url label))
-         (prompt (ai-code-read-string
-                  (format "Edit install-skills prompt for %s: " label)
-                  default-prompt)))
+         (prompt (if (called-interactively-p 'interactive)
+                     (ai-code-read-string
+                      (format "Edit install-skills prompt for %s: " label)
+                      default-prompt)
+                   default-prompt)))
     (ai-code-cli-send-command prompt)))
 
 ;;;###autoload

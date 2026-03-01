@@ -156,7 +156,7 @@
 
 (ert-deftest ai-code-test-auto-test-type-ask-choices-include-tdd-with-refactoring ()
   "Test that default ask choices include tdd-with-refactoring option."
-  (should (assoc "Test driven development with refactoring"
+  (should (assoc "Test driven development, follow up with refactoring"
                  ai-code--auto-test-type-ask-choices)))
 
 (ert-deftest ai-code-test-resolve-auto-test-suffix-for-send-ask-me-tdd-with-refactoring ()
@@ -176,7 +176,7 @@
   (let ((ai-code-auto-test-type 'ask-me))
     (cl-letf (((symbol-function 'ai-code--read-auto-test-type-choice)
                (lambda () 'no-test)))
-      (should (equal "Do not run any test."
+      (should (equal "Do not write or run any test."
                      (ai-code--resolve-auto-test-suffix-for-send))))))
 
 (ert-deftest ai-code-test-write-prompt-ask-me-no-test-appends-explicit-no-test-instruction ()
@@ -196,7 +196,7 @@
                (lambda (&rest _args) nil)))
       (ai-code--write-prompt-to-file-and-send "Implement feature")
       (should (string-match-p "BASE SUFFIX" sent-command))
-      (should (string-match-p "Do not run any test\\." sent-command))
+      (should (string-match-p "Do not write or run any test\\." sent-command))
       (should-not (string-match-p "SHOULD NOT APPEAR" sent-command)))))
 
 (provide 'test_ai-code)
