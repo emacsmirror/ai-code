@@ -40,6 +40,82 @@ Candidate values:
           (truename (file-truename file)))
       (string-prefix-p ignore-dir truename))))
 
+(defun ai-code--pull-or-review-action-choice ()
+  "Prompt user for action in `ai-code-pull-or-review-diff-file'."
+  (let* ((action-alist '(("Use GitHub MCP server" . github-mcp)
+                         ("Use gh CLI tool" . gh-cli)
+                         ("Generate diff file" . diff-file)))
+         (choice (completing-read "Select review source: "
+                                  action-alist
+                                  nil t nil nil "Use GitHub MCP server")))
+    (alist-get choice action-alist nil nil #'string=)))
+
+(defun ai-code--build-pr-review-init-prompt (review-source pr-url)
+  "Build PR review initial prompt for REVIEW-SOURCE with PR-URL."
+  (let ((source-instruction
+         (ai-code--pull-or-review-source-instruction review-source)))
+    (format "Review pull request: %s
+
+%s
+
+Review Steps:
+1. Requirement Fit: Verify the PR implementation against requirements.
+2. Code Quality: Check code quality, security, and performance concerns.
+3. Findings: For each issue include location, issue, fix suggestion, and priority.
+
+Provide an overall assessment at the end."
+            pr-url source-instruction)))
+
+(defun ai-code--build-pr-feedback-check-init-prompt (review-source pr-url)
+  "Build unresolved feedback check prompt for REVIEW-SOURCE with PR-URL."
+  (let ((source-instruction
+         (ai-code--pull-or-review-source-instruction review-source)))
+    (format "Check unresolved feedback for pull request: %s
+
+%s
+
+Feedback Check Steps:
+1. Find unresolved feedback or unresolved review comments in this PR.
+2. For each unresolved feedback, explain whether it makes sense and why.
+3. If a feedback does not make sense, explain why it may not be necessary.
+4. No need to make code change. Provide analysis only."
+            pr-url source-instruction)))
+
+(defun ai-code--pull-or-review-source-instruction (review-source)
+  "Return source instruction string for REVIEW-SOURCE."
+  (pcase review-source
+    ('github-mcp
+     "Use GitHub MCP server to fetch pull request details and review comments.")
+    ('gh-cli
+     "Use gh CLI tool to fetch pull request details and review comments.")
+    (_ "Review this pull request.")))
+
+(defun ai-code--pull-or-review-pr-with-source (review-source)
+  "Ask for PR URL and send review prompt for REVIEW-SOURCE to AI."
+  (let* ((pr-url (ai-code-read-string "Pull request URL: "))
+         (review-mode (ai-code--pull-or-review-pr-mode-choice))
+         (init-prompt (ai-code--build-pr-init-prompt review-source pr-url review-mode))
+         (prompt (ai-code-read-string "Enter review prompt: " init-prompt)))
+    (ai-code--insert-prompt prompt)))
+
+(defun ai-code--pull-or-review-pr-mode-choice ()
+  "Prompt user to choose PR analysis mode."
+  (let* ((review-mode-alist '(("Review the PR" . review-pr)
+                              ("Check unresolved feedback" . check-feedback)))
+         (review-mode (completing-read "Select PR analysis mode: "
+                                       review-mode-alist
+                                       nil t nil nil "Review the PR")))
+    (or (alist-get review-mode review-mode-alist nil nil #'string=)
+        'review-pr)))
+
+(defun ai-code--build-pr-init-prompt (review-source pr-url review-mode)
+  "Build initial prompt for REVIEW-SOURCE, PR-URL and REVIEW-MODE."
+  (pcase review-mode
+    ('check-feedback
+     (ai-code--build-pr-feedback-check-init-prompt review-source pr-url))
+    (_
+     (ai-code--build-pr-review-init-prompt review-source pr-url))))
+
 ;;;###autoload
 (defun ai-code-pull-or-review-diff-file ()
   "Review a diff file with AI Code or generate one if not viewing a diff.
@@ -60,7 +136,11 @@ Provide overall assessment.
 **Requirement**: " file-name))
              (prompt (ai-code-read-string "Enter review prompt (type requirement at end): " init-prompt)))
         (ai-code--insert-prompt prompt))
-    (ai-code--magit-generate-feature-branch-diff-file)))
+    ;; For non-diff files, let user choose PR review via MCP/gh CLI or keep diff generation.
+    (pcase (ai-code--pull-or-review-action-choice)
+      ('github-mcp (ai-code--pull-or-review-pr-with-source 'github-mcp))
+      ('gh-cli (ai-code--pull-or-review-pr-with-source 'gh-cli))
+      (_ (ai-code--magit-generate-feature-branch-diff-file)))))
 
 (defun ai-code--validate-git-repository ()
   "Validate that current directory is in a git repository.

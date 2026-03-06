@@ -180,6 +180,89 @@ When .gitignore is missing some entries, they should be added."
       ;; Cleanup
       (delete-directory temp-dir t))))
 
+(ert-deftest ai-code-test-pull-or-review-diff-file-use-github-mcp ()
+  "When user chooses GitHub MCP in non-diff buffer, insert a PR review prompt."
+  (pcase-let ((`(,captured-prompt ,diff-called)
+               (ai-code-test--run-pull-or-review-diff-file "Use GitHub MCP server"
+                                                           "https://github.com/acme/demo/pull/123")))
+    (let ((case-fold-search nil))
+      (should (string-match-p "Use GitHub MCP server" captured-prompt)))
+    (should (string-match-p "https://github.com/acme/demo/pull/123" captured-prompt))
+    (should-not diff-called)))
+
+(ert-deftest ai-code-test-pull-or-review-diff-file-use-gh-cli ()
+  "When user chooses gh CLI in non-diff buffer, insert a PR review prompt."
+  (pcase-let ((`(,captured-prompt ,diff-called)
+               (ai-code-test--run-pull-or-review-diff-file "Use gh CLI tool"
+                                                           "https://github.com/acme/demo/pull/456")))
+    (let ((case-fold-search nil))
+      (should (string-match-p "Use gh CLI tool" captured-prompt)))
+    (should (string-match-p "https://github.com/acme/demo/pull/456" captured-prompt))
+    (should-not diff-called)))
+
+(ert-deftest ai-code-test-pull-or-review-diff-file-generate-diff-option ()
+  "When user chooses diff generation in non-diff buffer, keep existing logic."
+  (pcase-let ((`(,captured-prompt ,diff-called)
+               (ai-code-test--run-pull-or-review-diff-file "Generate diff file" nil)))
+    (should diff-called)
+    (should-not captured-prompt)))
+
+(ert-deftest ai-code-test-pull-or-review-diff-file-check-feedback-github-mcp ()
+  "When choosing feedback mode with GitHub MCP, prompt should target unresolved feedback."
+  (pcase-let ((`(,captured-prompt ,diff-called)
+               (ai-code-test--run-pull-or-review-diff-file "Use GitHub MCP server"
+                                                           "https://github.com/acme/demo/pull/789"
+                                                           "Check unresolved feedback")))
+    (let ((case-fold-search nil))
+      (should (string-match-p "Use GitHub MCP server" captured-prompt)))
+    (should (string-match-p "unresolved feedback" (downcase captured-prompt)))
+    (should (string-match-p "no need to make code change" (downcase captured-prompt)))
+    (should-not diff-called)))
+
+(ert-deftest ai-code-test-pull-or-review-diff-file-check-feedback-gh-cli ()
+  "When choosing feedback mode with gh CLI, prompt should target unresolved feedback."
+  (pcase-let ((`(,captured-prompt ,diff-called)
+               (ai-code-test--run-pull-or-review-diff-file "Use gh CLI tool"
+                                                           "https://github.com/acme/demo/pull/790"
+                                                           "Check unresolved feedback")))
+    (let ((case-fold-search nil))
+      (should (string-match-p "Use gh CLI tool" captured-prompt)))
+    (should (string-match-p "unresolved feedback" (downcase captured-prompt)))
+    (should (string-match-p "no need to make code change" (downcase captured-prompt)))
+    (should-not diff-called)))
+
+(ert-deftest ai-code-test-build-pr-review-init-prompt-uses-fallback-for-unknown-source ()
+  "Unknown review source should use the fallback instruction."
+  (let ((prompt (ai-code--build-pr-review-init-prompt
+                 'unknown-source
+                 "https://github.com/acme/demo/pull/999")))
+    (should (string-match-p "Review this pull request\\." prompt))))
+
+(defun ai-code-test--run-pull-or-review-diff-file (choice pr-url &optional review-mode-choice)
+  "Run `ai-code-pull-or-review-diff-file' with CHOICE and optional PR-URL.
+REVIEW-MODE-CHOICE is used for review mode selection when prompted.
+Return (CAPTURED-PROMPT DIFF-CALLED)."
+  (let* ((captured-prompt nil)
+         (diff-called nil)
+         (completing-read-results (delq nil (list choice review-mode-choice))))
+    (with-temp-buffer
+      (cl-letf (((symbol-function 'completing-read)
+                 (lambda (&rest _args)
+                   (let ((selected (car completing-read-results)))
+                     (setq completing-read-results (cdr completing-read-results))
+                     selected)))
+                ((symbol-function 'ai-code-read-string)
+                 (lambda (prompt &optional initial-input _candidate-list)
+                   (if (string-prefix-p "Pull request URL" prompt)
+                       pr-url
+                     initial-input)))
+                ((symbol-function 'ai-code--insert-prompt)
+                 (lambda (prompt) (setq captured-prompt prompt)))
+                ((symbol-function 'ai-code--magit-generate-feature-branch-diff-file)
+                 (lambda () (setq diff-called t))))
+        (ai-code-pull-or-review-diff-file)))
+    (list captured-prompt diff-called)))
+
 (provide 'test_ai-code-git)
 
 ;;; test_ai-code-git.el ends here
