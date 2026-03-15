@@ -166,6 +166,71 @@ The generated prompt will include the function/region scope, visible file list, 
   - [[https://github.com/crystaldba/postgres-mcp][Postgresql MCP]] / Sqlite MCP
   - [[https://github.com/docker/mcp-gateway][Docker]] / [[https://github.com/containers/kubernetes-mcp-server][Kubernetes]] MCP
 
+**** Built-in Emacs MCP Tools Core
+
+This package also provides a transport-agnostic MCP tools core for exposing Emacs capabilities to AI backends and adapter code. The current implementation focuses on the reusable core pieces:
+
+- tool registration
+- MCP method dispatch for =initialize=, =tools/list=, and =tools/call=
+- per-session project context
+- built-in common Emacs tools:
+  - =project_info=
+  - =imenu_list_symbols=
+  - =xref_find_references=
+  - =treesit_info=
+
+You can enable the built-in tool set in Elisp:
+
+#+begin_src emacs-lisp
+(require 'ai-code-mcp-server)
+(ai-code-mcp-builtins-setup)
+#+end_src
+
+At this stage, the MCP core is most useful for backend adapters, Lisp-side integrations, and testing. It does not yet start a standalone HTTP listener by itself.
+
+***** Register a Custom Tool
+
+Use =ai-code-mcp-make-tool= to expose a custom Emacs function as an MCP tool:
+
+#+begin_src emacs-lisp
+(ai-code-mcp-make-tool
+ :function (lambda (file_path)
+             (with-current-buffer (find-file-noselect file_path t)
+               (count-lines (point-min) (point-max))))
+ :name "count_lines"
+ :description "Count the number of lines in a file."
+ :args '((:name "file_path"
+          :type string
+          :description "Absolute or project-relative file path.")))
+#+end_src
+
+***** Dispatch MCP Methods Directly
+
+You can call the MCP core directly from Elisp:
+
+#+begin_src emacs-lisp
+;; Inspect registered tools
+(ai-code-mcp-dispatch "tools/list")
+
+;; Call a tool
+(ai-code-mcp-dispatch
+ "tools/call"
+ '((name . "project_info")
+   (arguments . ())))
+#+end_src
+
+If you need project-specific execution, register a session first and dynamically bind the current session while dispatching:
+
+#+begin_src emacs-lisp
+(let ((session-id "demo-session"))
+  (ai-code-mcp-register-session session-id default-directory (current-buffer))
+  (let ((ai-code-mcp--current-session-id session-id))
+    (ai-code-mcp-dispatch
+     "tools/call"
+     '((name . "project_info")
+       (arguments . ())))))
+#+end_src
+
 - [[https://martinfowler.com/articles/exploring-gen-ai/context-engineering-coding-agents.html][Context Engineering for Coding Agents]], recommended by Martin Fowler.
 
 *** Harness Engineering Practice
