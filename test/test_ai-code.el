@@ -10,6 +10,12 @@
 
 (require 'ert)
 (require 'cl-lib)
+
+(require 'transient)
+
+(unless (fboundp 'transient-define-group)
+  (error "ai-code tests require transient-define-group; please install transient >= 0.9.0"))
+
 (require 'ai-code)
 
 (defvar ai-code--tdd-run-test-after-each-stage-instruction)
@@ -226,6 +232,37 @@
                  (setq called-fn fn))))
       (ai-code-menu)
       (should (eq called-fn #'ai-code-menu-2-columns)))))
+
+(ert-deftest ai-code-test-package-requires-transient-0-9 ()
+  "Test that ai-code requires Transient 0.9 or newer."
+  (with-temp-buffer
+    (let* ((this-file (or load-file-name (buffer-file-name)))
+           (project-root (and this-file
+                              (locate-dominating-file this-file "ai-code.el")))
+           (ai-code-file (and project-root
+                              (expand-file-name "ai-code.el" project-root))))
+      (should ai-code-file)
+      (insert-file-contents ai-code-file)
+      (should (re-search-forward
+               "Package-Requires: ((emacs \"28\\.1\") (transient \"0\\.9\\.0\")"
+               nil t)))))
+
+(ert-deftest ai-code-test-menu-groups-define-four-sections ()
+  "Test that menu sections are defined as reusable transient groups."
+  (dolist (group '(ai-code--menu-ai-cli-session
+                   ai-code--menu-actions-with-context
+                   ai-code--menu-agile-development
+                   ai-code--menu-other-tools))
+    (should (boundp group))
+    (should (symbol-value group))))
+
+(ert-deftest ai-code-test-menu-prefix-commands-are-interactive ()
+  "Test that the main menu and layout-specific menus are defined as commands."
+  (dolist (cmd '(ai-code-menu
+                 ai-code-menu-default
+                 ai-code-menu-2-columns))
+    (should (fboundp cmd))
+    (should (commandp cmd))))
 
 (provide 'test_ai-code)
 
