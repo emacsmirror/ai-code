@@ -34,7 +34,6 @@
     "get_diagnostics"
     "get_project_buffers"
     "get_project_files"
-    "get_variable_value"
     "imenu_list_symbols"
     "notify_user"
     "project_info"
@@ -126,7 +125,8 @@
 
 (ert-deftest ai-code-test-mcp-builtins-setup-registers-common-tools-once ()
   "Built-in setup should register the common Emacs tools without duplicates."
-  (let ((ai-code-mcp-server-tools nil))
+  (let ((ai-code-mcp-server-tools nil)
+        (ai-code-mcp-debug-tools-enabled nil))
     (ai-code-mcp-builtins-setup)
     (ai-code-mcp-builtins-setup)
     (let ((tool-names (sort (mapcar (lambda (tool)
@@ -137,7 +137,6 @@
                         "get_diagnostics"
                         "get_project_buffers"
                         "get_project_files"
-                        "get_variable_value"
                         "imenu_list_symbols"
                         "notify_user"
                         "project_info"
@@ -148,7 +147,8 @@
 
 (ert-deftest ai-code-test-mcp-tools-list-registers-builtins-by-default ()
   "Tools list should expose built-in tools without manual setup."
-  (let ((ai-code-mcp-server-tools nil))
+  (let ((ai-code-mcp-server-tools nil)
+        (ai-code-mcp-debug-tools-enabled nil))
     (let* ((tools-result (ai-code-mcp-dispatch "tools/list"))
            (tool-names (sort (mapcar (lambda (tool)
                                        (alist-get 'name tool))
@@ -178,61 +178,6 @@
         (should beep-called)
         (should (equal "Notified user: Build finished"
                        (ai-code-test-mcp--content-text result)))))))
-
-(ert-deftest ai-code-test-mcp-get-variable-value-returns-bound-variable ()
-  "Variable value tool should stringify the requested Emacs variable."
-  (let ((ai-code-mcp-server-tools nil)
-        (ai-code-mcp-diagnostics-backend 'flymake))
-    (let ((result (ai-code-mcp-dispatch
-                   "tools/call"
-                   '((name . "get_variable_value")
-                     (arguments . ((variable_name . "ai-code-mcp-diagnostics-backend")))))))
-      (should (equal "flymake"
-                     (ai-code-test-mcp--content-text result))))))
-
-(ert-deftest ai-code-test-mcp-get-variable-value-reports-missing-variable-without-interning ()
-  "Unknown variable names should not be interned and should return a friendly error."
-  (let* ((ai-code-mcp-server-tools nil)
-         (variable-name "ai-code-test-mcp-missing-variable")
-         (result nil))
-    (when (intern-soft variable-name)
-      (ert-fail "Test requires a missing symbol name"))
-    (setq result
-          (ai-code-mcp-dispatch
-           "tools/call"
-           `((name . "get_variable_value")
-             (arguments . ((variable_name . ,variable-name))))))
-    (should (equal (format "Variable not found: %s" variable-name)
-                   (ai-code-test-mcp--content-text result)))
-    (should-not (intern-soft variable-name))))
-
-(ert-deftest ai-code-test-mcp-get-variable-value-reports-unbound-variable ()
-  "Unbound variable names should return a friendly error."
-  (let ((ai-code-mcp-server-tools nil)
-        (variable-name "ai-code-test-mcp-unbound-variable"))
-    (unwind-protect
-        (let ((symbol (intern variable-name)))
-          (setplist symbol nil)
-          (makunbound symbol)
-          (let ((result (ai-code-mcp-dispatch
-                         "tools/call"
-                         `((name . "get_variable_value")
-                           (arguments . ((variable_name . ,variable-name)))))))
-            (should (equal (format "Variable is unbound: %s" variable-name)
-                           (ai-code-test-mcp--content-text result)))))
-      (unintern variable-name obarray))))
-
-(ert-deftest ai-code-test-mcp-tools-list-describes-variable-value-as-printed-representation ()
-  "Variable value tool metadata should match the returned representation."
-  (let ((ai-code-mcp-server-tools nil))
-    (let* ((tools-result (ai-code-mcp-dispatch "tools/list"))
-           (variable-tool (seq-find
-                           (lambda (tool)
-                             (equal "get_variable_value" (alist-get 'name tool)))
-                           (alist-get 'tools tools-result))))
-      (should variable-tool)
-      (should (equal "Get the printed representation of an Emacs variable value by name."
-                     (alist-get 'description variable-tool))))))
 
 (ert-deftest ai-code-test-mcp-tools-list-encodes-empty-input-schema-properties ()
   "No-argument tools should encode empty schema properties as an object."
