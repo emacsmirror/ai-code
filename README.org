@@ -132,7 +132,6 @@ Enable installation of packages from MELPA by adding an entry to package-archive
 - One of vterm (default), eat, or [[https://github.com/dakra/ghostel][ghostel]] needs to be installed to support native AI coding CLI backends, depending on `ai-code-backends-infra-terminal-backend`.
 - [[https://github.com/dakra/ghostel][ghostel]] is also supported as an *experimental* native backend infra option.
   - Ghostel is an Emacs terminal emulator powered by libghostty-vt, the VT engine from Ghostty.
-  - Compared with vterm and eat, ghostel support in ai-code-interface.el is still experimental and may behave differently in startup flow, shell integration, or buffer naming.
   - To try it:
 
 #+begin_src emacs-lisp
@@ -511,6 +510,13 @@ When working with multiple AI sessions, it can be useful to receive desktop noti
 - A: Enable auto-approval for your active AI coding CLI. For example, in Codex CLI, you can enable the following flag.
 #+begin_src elisp
   (setq ai-code-codex-cli-program-switches '("-a" "never"))
+#+end_src
+
+*** Q: During using ghostel terminal backend, for long conversation, I found the earliest conversation got truncated
+
+- A: Ghostel trims old output after `ghostel-max-scrollback` bytes are used. The default is 5 MB, so increase it before starting Ghostel sessions.
+#+begin_src elisp
+  (setq ghostel-max-scrollback (* 20 1024 1024)) ; 20 MB
 #+end_src
 
 ** AI Assisted Programming related books
