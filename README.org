@@ -32,8 +32,6 @@ An Emacs interface for AI-assisted software development. *The purpose is to prov
 
 - *ai-code-interface.el* is built for the second case. Its real advantage is not just backend coverage. Its main advantage is *workflow portability*: the same menu, context gathering, prompt flow, refactoring commands, TDD helpers, review workflow, prompt files, and Emacs MCP tools continue to work while the backend changes underneath.
 
-- That distinction matters if you do not want to commit to a single winner forever. You can use Claude Code for one task, Codex for another, Gemini CLI for a third, and still keep the same habits inside Emacs: the same entry points, the same context model, and the same review-oriented development flow. You are changing the backend, not changing how you work.
-
 - Screenshot
 
 [[./transient_menu.png]]
