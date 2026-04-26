@@ -305,7 +305,8 @@ Return one of: `code-change`, `non-code-change`, or `unknown`."
                  (let* ((raw-answer (ai-code-call-gptel-sync
                                      (concat "Classify whether this user prompt requests program code changes in a repository.\n"
                                              "Reply with exactly one token: CODE_CHANGE or NOT_CODE_CHANGE.\n"
-                                             "Treat edit/refactor/implement/fix/add/remove/update/tests as CODE_CHANGE.\n"
+                                             "Return CODE_CHANGE only for changes to program code or test code.\n"
+                                             "Treat documentation changes and any other non-program-code actions as NOT_CODE_CHANGE.\n"
                                              "Treat explain/summarize/discuss/review without editing as NOT_CODE_CHANGE.\n\n"
                                              "Prompt:\n" prompt-text)))
                         (answer (upcase (string-trim (or raw-answer "")))))
