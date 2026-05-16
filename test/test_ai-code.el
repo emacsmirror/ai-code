@@ -185,6 +185,31 @@
     (should (equal (plist-get (cdr suffix) :description)
                    "Debug Emacs runtime"))))
 
+(ert-deftest ai-code-test-session-checkpoint-sends-fixed-checkpoint-prompt ()
+  "Test that session checkpoint sends the expected fixed prompt."
+  (let (sent-command switched)
+    (cl-letf (((symbol-function 'ai-code-cli-send-command)
+               (lambda (&rest args)
+                 (setq sent-command (car args))))
+              ((symbol-function 'ai-code-cli-switch-to-buffer)
+               (lambda (&rest _args)
+                 (setq switched t))))
+      (ai-code-session-checkpoint))
+    (should
+     (equal sent-command
+            "Please stop and output a CHECKPOINT:\n- Goal\n- Files changed\n- Current hypothesis\n- Tests/build result\n- Blockers\n- Recommended next action\nDo not continue editing after this checkpoint"))
+    (should switched)))
+
+(ert-deftest ai-code-test-menu-other-tools-includes-session-checkpoint-entry ()
+  "Test that the Other Tools menu exposes AI session checkpoint."
+  (let* ((suffix (transient-get-suffix 'ai-code--menu-other-tools "P"))
+         (definition (cdr suffix)))
+    (should suffix)
+    (should (eq (plist-get definition :command)
+                'ai-code-session-checkpoint))
+    (should (equal (plist-get definition :description)
+                   "AI session checkpoint"))))
+
 (ert-deftest ai-code-test-menu-prefix-command-default-layout ()
   "Test that the default menu layout uses the original transient."
   (let ((ai-code-menu-layout 'default))
