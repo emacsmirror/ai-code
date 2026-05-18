@@ -45,20 +45,11 @@
   "Completion choices for speech-to-text transcription handling.")
 
 ;;;###autoload
-(defun ai-code-plain-read-string (prompt &optional initial-input candidate-list)
+(defun ai-code-plain-read-string (prompt &optional initial-input _candidate-list)
   "Read a string from the user with PROMPT and optional INITIAL-INPUT.
-CANDIDATE-LIST provides additional completion options if provided.
-This function combines candidate-list with history for better completion."
-  ;; Combine candidate-list with history, removing duplicates
-  (let ((completion-candidates
-         (delete-dups (append candidate-list
-                              (when (boundp 'ai-code-read-string-history)
-                                ai-code-read-string-history)))))
-    ;; Use completing-read with the combined candidates
-    (completing-read prompt
-                     completion-candidates
-                     nil nil initial-input
-                     'ai-code-read-string-history)))
+_CANDIDATE-LIST is accepted for interface compatibility but ignored.
+Uses `read-string' directly to avoid `helm-mode' intercepting `completing-read'."
+  (read-string prompt initial-input 'ai-code-read-string-history))
 
 (defvar ai-code--read-string-fn #'ai-code-plain-read-string
   "Function used by `ai-code-read-string' to read user input.")
