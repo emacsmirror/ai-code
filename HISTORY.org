@@ -2,6 +2,7 @@
 * Release history
 
 ** Main branch change
+- Fix: Simplify ai-code-plain-read-string to use read-string
 
 ** 1.81
 - Add architecture guardrails derivation command for existing repos
