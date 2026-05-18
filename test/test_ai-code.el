@@ -221,6 +221,15 @@
     (should (eq (plist-get (cdr suffix) :command)
                 'ai-code-select-terminal))))
 
+(ert-deftest ai-code-test-menu-actions-with-context-includes-derive-ddd-context-entry ()
+  "Test that the actions menu exposes the DDD context derivation command."
+  (let ((suffix (transient-get-suffix 'ai-code--menu-actions-with-context "o")))
+    (should suffix)
+    (should (eq (plist-get (cdr suffix) :command)
+                'ai-code-derive-ddd-context))
+    (should (equal (plist-get (cdr suffix) :description)
+                   "Derive DDD Context for Repo"))))
+
 (ert-deftest ai-code-test-menu-ai-cli-session-includes-session-dashboard-entry ()
   "Test that the AI CLI session menu exposes the session dashboard."
   (let ((suffix (transient-get-suffix 'ai-code--menu-ai-cli-session "j")))
