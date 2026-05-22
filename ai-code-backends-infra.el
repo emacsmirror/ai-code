@@ -16,7 +16,6 @@
 ;;; Code:
 
 (require 'cl-lib)
-(require 'project)
 (require 'subr-x)
 (require 'ai-code-session)
 (require 'ai-code-session-link)
@@ -27,6 +26,10 @@
 (require 'ai-code-backends-infra-ghostel)
 
 (declare-function ai-code--session-handle-at-input "ai-code-input" ())
+(declare-function ai-code--session-project-root "ai-code-utils" ())
+
+;; DONE: In previous PR: https://github.com/tninja/ai-code-interface.el/pull/349, it set default new AI session instance names from prompt buffer filenames
+;; But now we want to set the default new AI session instance names as current branch name. If this name has been used for an existing session, then we can fallback to using the prompt buffer filename as the default new AI session instance name.
 
 ;;; Customization
 
@@ -394,6 +397,16 @@ The timer is reset only after meaningful output is observed."
   ;; Keep reflow advice synchronized with current backend/settings.
   (ai-code-backends-infra--sync-reflow-filter-advice))
 
+(defun ai-code-backends-infra--terminal-dispatch (operation &rest args)
+  "Dispatch OPERATION to the current terminal backend, passing ARGS.
+Constructs function name as `ai-code-backends-infra-<backend>-<operation>'."
+  (let* ((backend (ai-code-backends-infra--current-terminal-backend))
+         (fn (intern (format "ai-code-backends-infra-%s-%s" backend operation))))
+    (if (fboundp fn)
+        (apply fn args)
+      (error "Terminal backend %s does not support %s (looked up: %s)"
+             backend operation fn))))
+
 (defun ai-code-backends-infra--current-terminal-backend ()
   "Return terminal backend for current buffer operations."
   (or ai-code-backends-infra--session-terminal-backend
@@ -420,46 +433,23 @@ The timer is reset only after meaningful output is observed."
 
 (defun ai-code-backends-infra--install-navigation-cursor-sync ()
   "Install buffer-local hooks for cursor handoff in terminal navigation modes."
-  (pcase (ai-code-backends-infra--current-terminal-backend)
-    ('vterm (ai-code-backends-infra-vterm-install-navigation-cursor-sync))
-    ('ghostel (ai-code-backends-infra-ghostel-install-navigation-cursor-sync))
-    ('eat (ai-code-backends-infra-eat-install-navigation-cursor-sync))))
+  (ai-code-backends-infra--terminal-dispatch "install-navigation-cursor-sync"))
 
 (defun ai-code-backends-infra--terminal-send-string (string)
   "Send STRING to the terminal in the current buffer."
-  (pcase (ai-code-backends-infra--current-terminal-backend)
-    ('vterm (ai-code-backends-infra-vterm-send-string string))
-    ('eat (ai-code-backends-infra-eat-send-string string))
-    ('ghostel (ai-code-backends-infra-ghostel-send-string string))
-    (_ (error "Unknown terminal backend: %s"
-              (ai-code-backends-infra--current-terminal-backend)))))
+  (ai-code-backends-infra--terminal-dispatch "send-string" string))
 
 (defun ai-code-backends-infra--terminal-send-escape ()
   "Send escape key to the terminal in the current buffer."
-  (pcase (ai-code-backends-infra--current-terminal-backend)
-    ('vterm (ai-code-backends-infra-vterm-send-escape))
-    ('eat (ai-code-backends-infra-eat-send-escape))
-    ('ghostel (ai-code-backends-infra-ghostel-send-escape))
-    (_ (error "Unknown terminal backend: %s"
-              (ai-code-backends-infra--current-terminal-backend)))))
+  (ai-code-backends-infra--terminal-dispatch "send-escape"))
 
 (defun ai-code-backends-infra--terminal-send-return ()
   "Send return key to the terminal in the current buffer."
-  (pcase (ai-code-backends-infra--current-terminal-backend)
-    ('vterm (ai-code-backends-infra-vterm-send-return))
-    ('eat (ai-code-backends-infra-eat-send-return))
-    ('ghostel (ai-code-backends-infra-ghostel-send-return))
-    (_ (error "Unknown terminal backend: %s"
-              (ai-code-backends-infra--current-terminal-backend)))))
+  (ai-code-backends-infra--terminal-dispatch "send-return"))
 
 (defun ai-code-backends-infra--terminal-send-backspace ()
   "Send backspace key to the terminal in the current buffer."
-  (pcase (ai-code-backends-infra--current-terminal-backend)
-    ('vterm (ai-code-backends-infra-vterm-send-backspace))
-    ('eat (ai-code-backends-infra-eat-send-backspace))
-    ('ghostel (ai-code-backends-infra-ghostel-send-backspace))
-    (_ (error "Unknown terminal backend: %s"
-              (ai-code-backends-infra--current-terminal-backend)))))
+  (ai-code-backends-infra--terminal-dispatch "send-backspace"))
 
 (defun ai-code-backends-infra--terminal-send-multiline-input ()
   "Send the configured multiline-input sequence for the current session buffer."
@@ -637,9 +627,7 @@ from the window where it was initially created."
 
 (defun ai-code-backends-infra--session-working-directory ()
   "Return the working directory, preferring the current project root."
-  (if-let ((project (project-current)))
-      (expand-file-name (project-root project))
-    (expand-file-name default-directory)))
+  (ai-code--session-project-root))
 
 (defun ai-code-backends-infra--normalize-session-directory (directory)
   "Return DIRECTORY normalized for robust session matching."
@@ -649,12 +637,19 @@ from the window where it was initially created."
   "Return normalized absolute path for FILE."
   (expand-file-name file))
 
-(defun ai-code-backends-infra--default-instance-name ()
-  "Return the default instance name for the current buffer, or nil."
+(declare-function magit-get-current-branch "magit-git" ())
+
+(defun ai-code-backends-infra--default-instance-name (&optional existing-instance-names)
+  "Return the default instance name for the current buffer, or nil.
+When the current git branch is available and not in EXISTING-INSTANCE-NAMES,
+use the branch name.  Otherwise fall back to the prompt buffer filename."
   (when (and (eq major-mode 'ai-code-prompt-mode)
              (stringp buffer-file-name)
              (> (length buffer-file-name) 0))
-    (file-name-nondirectory buffer-file-name)))
+    (let ((branch (ignore-errors (magit-get-current-branch))))
+      (if (and branch (not (member branch existing-instance-names)))
+          branch
+        (file-name-nondirectory buffer-file-name)))))
 
 (defun ai-code-backends-infra--file-session-map-key (prefix source-buffer)
   "Return file-session map key for PREFIX and SOURCE-BUFFER."
@@ -1026,7 +1021,8 @@ Return a plist with :instance-name, :buffer-name, and :session-key."
                               (ai-code-backends-infra--prompt-for-instance-name
                                existing-instance-names
                                force-prompt
-                               (ai-code-backends-infra--default-instance-name)))
+                               (ai-code-backends-infra--default-instance-name
+                                existing-instance-names)))
                              (t "default")))
          (resolved-buffer-name (or buffer-name
                                     (and prefix

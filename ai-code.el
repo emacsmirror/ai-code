@@ -168,24 +168,18 @@ with a newline separator."
   :group 'ai-code)
 
 ;;;###autoload
+(defcustom ai-code-quick-prompts nil
+  "List of pre-defined prompt strings for quick sending to AI.
+Each entry is a string that can be selected via `ai-code-send-quick-prompt`
+and sent to the current AI session."
+  :type '(repeat string)
+  :group 'ai-code)
+
+;;;###autoload
 (defcustom ai-code-cli "claude"
   "The command-line AI tool to use for `ai-code-apply-prompt-on-current-file`."
   :type 'string
   :group 'ai-code)
-
-(defun ai-code--get-clipboard-text ()
-  "Return the current clipboard contents as a plain string, or nil if unavailable."
-  (let* ((selection (when (fboundp 'gui-get-selection)
-                      (or (let ((text (gui-get-selection 'CLIPBOARD 'UTF8_STRING)))
-                            (and (stringp text) (not (string-empty-p text)) text))
-                          (let ((text (gui-get-selection 'CLIPBOARD 'STRING)))
-                            (and (stringp text) (not (string-empty-p text)) text)))))
-         (kill-text (condition-case nil
-                        (current-kill 0 t)
-                      (error nil))))
-    (let ((text (or selection kill-text)))
-      (when (stringp text)
-        (substring-no-properties text)))))
 
 ;;;###autoload
 (defun ai-code-send-command (arg)
@@ -226,6 +220,16 @@ ARG is the prefix argument."
                                clipboard-context)))))
          (ai-code--insert-prompt final-prompt)))))
 
+;;;###autoload
+(defun ai-code-send-quick-prompt ()
+  "Select and send a pre-defined prompt from `ai-code-quick-prompts`."
+  ;; DONE: use ai-code-read-string to allow user to modify the prompt before sending
+  (interactive)
+  (unless ai-code-quick-prompts
+    (user-error "No quick prompts configured; customize `ai-code-quick-prompts' first"))
+  (let ((selected (completing-read "Quick prompt: " ai-code-quick-prompts nil t)))
+    (ai-code--confirm-and-send "Edit quick prompt: " selected)))
+
 (defconst ai-code-session-checkpoint-prompt
   (concat
    "Please stop and output a CHECKPOINT:\n"
@@ -242,8 +246,10 @@ ARG is the prefix argument."
 (defun ai-code-session-checkpoint ()
   "Ask the active AI session to summarize its current state and stop editing."
   (interactive)
-  (ai-code-cli-send-command ai-code-session-checkpoint-prompt)
-  (ai-code-cli-switch-to-buffer))
+  ;; DONE: let user to edit and confirm the prompt before sending, with read-string function
+  (when-let* ((prompt (ai-code-read-string "Edit checkpoint prompt: "
+                                           ai-code-session-checkpoint-prompt)))
+    (ai-code--insert-prompt prompt)))
 
 (defun ai-code--emacs-runtime-debug-prompt (description eval-available-p
                                                        &optional region-text region-location-info)
@@ -297,15 +303,13 @@ Optional REGION-TEXT and REGION-LOCATION-INFO add selected-region context."
       (message
        "eval_elisp is disabled in your Emacs MCP config. It is better to turn it on to improve debugging capability."))
     (when description
-      (when-let* ((prompt
-                   (ai-code-read-string
-                    "Confirm and edit Emacs runtime debug prompt: "
-                    (ai-code--emacs-runtime-debug-prompt
-                     description
-                     eval-available-p
-                     region-text
-                     region-location-info))))
-        (ai-code--insert-prompt prompt)))))
+      (ai-code--confirm-and-send
+       "Confirm and edit Emacs runtime debug prompt: "
+       (ai-code--emacs-runtime-debug-prompt
+        description
+        eval-available-p
+        region-text
+        region-location-info)))))
 
 ;;;###autoload
 (defun ai-code-cli-switch-to-buffer-or-hide ()
@@ -487,6 +491,8 @@ Shows the current backend label to the right."
   ;; ("m" "Debug python MCP server" ai-code-debug-mcp)
   ;; ("N" "Toggle notifications" ai-code-notifications-toggle)
   ("d" "Debug Emacs runtime" ai-code-debug-emacs-runtime)
+  ;; DONE: Add a menu item here: Given a new customized variable, which suppose to be a list of strings, by default it is nil. User can choose one from it, probably with complet-reading, and it will be sent to AI session with ai-code--insert-prompt. This is useful for user to quickly send some pre-defined prompt templates or instructions to AI, like a shortcut.
+  ("Q" "Send quick prompt" ai-code-send-quick-prompt)
   ("|" "Apply prompt on file" ai-code-apply-prompt-on-current-file)
   ("h" "Help / Quick Start" ai-code-onboarding-open-quickstart))
 

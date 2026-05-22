@@ -10,6 +10,7 @@
 
 (require 'ert)
 (require 'cl-lib)
+(require 'ai-code-file)
 (require 'ai-code-backends-infra)
 (require 'ai-code-notifications)
 
@@ -2718,6 +2719,119 @@ The result is a cons of whether SYMBOL is bound and its default value."
         (should-not timer-scheduled)
         (should-not ai-code-backends-infra--vterm-render-queue)
         (should-not ai-code-backends-infra--vterm-render-timer)))))
+
+(ert-deftest test-ai-code-backends-infra-default-instance-name-prefers-branch ()
+  "Default instance name should prefer current git branch."
+  (with-temp-buffer
+    (setq-local major-mode 'ai-code-prompt-mode)
+    (setq-local buffer-file-name "/tmp/test.ai.code.prompt.org")
+    (cl-letf (((symbol-function 'magit-get-current-branch)
+               (lambda () "feat/login-page")))
+      (should (equal (ai-code-backends-infra--default-instance-name)
+                     "feat/login-page")))))
+
+(ert-deftest test-ai-code-backends-infra-default-instance-name-falls-back-to-filename-when-branch-taken ()
+  "Default instance name should fall back to filename when branch is already in use."
+  (with-temp-buffer
+    (setq-local major-mode 'ai-code-prompt-mode)
+    (setq-local buffer-file-name "/tmp/test.ai.code.prompt.org")
+    (cl-letf (((symbol-function 'magit-get-current-branch)
+               (lambda () "feat/login-page")))
+      (should (equal (ai-code-backends-infra--default-instance-name
+                      '("feat/login-page"))
+                     "test.ai.code.prompt.org")))))
+
+(ert-deftest test-ai-code-backends-infra-default-instance-name-falls-back-to-filename-without-branch ()
+  "Default instance name should fall back to filename when branch is unavailable."
+  (with-temp-buffer
+    (setq-local major-mode 'ai-code-prompt-mode)
+    (setq-local buffer-file-name "/tmp/test.ai.code.prompt.org")
+    (cl-letf (((symbol-function 'magit-get-current-branch)
+               (lambda () nil)))
+      (should (equal (ai-code-backends-infra--default-instance-name)
+                     "test.ai.code.prompt.org")))))
+
+(ert-deftest test-ai-code-backends-infra-default-instance-name-nil-outside-prompt-mode ()
+  "Default instance name should be nil outside prompt mode."
+  (with-temp-buffer
+    (cl-letf (((symbol-function 'magit-get-current-branch)
+               (lambda () "main")))
+      (should-not (ai-code-backends-infra--default-instance-name)))))
+
+;;; --- session-working-directory delegation tests ---
+
+(ert-deftest test-ai-code-backends-infra-session-working-directory-falls-back-to-git-root ()
+  "session-working-directory should fall back to git root when project.el fails."
+  (let ((default-directory "/tmp/fallback/"))
+    (cl-letf (((symbol-function 'project-current)
+               (lambda (&optional _maybe-prompt _dir) nil))
+              ((symbol-function 'magit-toplevel)
+               (lambda (&optional _dir) "/git/repo/")))
+      (should (equal (ai-code-backends-infra--session-working-directory)
+                     "/git/repo/")))))
+
+(ert-deftest test-ai-code-backends-infra-session-working-directory-returns-project-root ()
+  "session-working-directory should return project.el root when available."
+  (let ((default-directory "/tmp/fallback/"))
+    (cl-letf (((symbol-function 'project-current)
+               (lambda (&optional _maybe-prompt _dir)
+                 '(vc Git "/projects/myapp/")))
+              ((symbol-function 'project-root)
+               (lambda (_project) "/projects/myapp/"))
+              ((symbol-function 'magit-toplevel)
+               (lambda (&optional _dir) "/git/other/")))
+      (should (equal (ai-code-backends-infra--session-working-directory)
+                     "/projects/myapp/")))))
+
+;;; --- terminal-dispatch tests ---
+
+(ert-deftest test-ai-code-backends-infra-terminal-dispatch-routes-to-backend ()
+  "Dispatch should construct and call the correct backend function."
+  (let ((called-with nil))
+    (cl-letf (((symbol-function 'ai-code-backends-infra--current-terminal-backend)
+               (lambda () 'vterm))
+              ((symbol-function 'ai-code-backends-infra-vterm-send-string)
+               (lambda (s) (setq called-with s) t)))
+      (ai-code-backends-infra--terminal-dispatch "send-string" "hello")
+      (should (equal called-with "hello")))))
+
+(ert-deftest test-ai-code-backends-infra-terminal-dispatch-routes-eat ()
+  "Dispatch should route to eat backend."
+  (let ((called nil))
+    (cl-letf (((symbol-function 'ai-code-backends-infra--current-terminal-backend)
+               (lambda () 'eat))
+              ((symbol-function 'ai-code-backends-infra-eat-send-escape)
+               (lambda () (setq called t))))
+      (ai-code-backends-infra--terminal-dispatch "send-escape")
+      (should called))))
+
+(ert-deftest test-ai-code-backends-infra-terminal-dispatch-routes-ghostel ()
+  "Dispatch should route to ghostel backend."
+  (let ((called nil))
+    (cl-letf (((symbol-function 'ai-code-backends-infra--current-terminal-backend)
+               (lambda () 'ghostel))
+              ((symbol-function 'ai-code-backends-infra-ghostel-send-return)
+               (lambda () (setq called t))))
+      (ai-code-backends-infra--terminal-dispatch "send-return")
+      (should called))))
+
+(ert-deftest test-ai-code-backends-infra-terminal-dispatch-errors-on-missing-op ()
+  "Dispatch should error when backend does not support the operation."
+  (cl-letf (((symbol-function 'ai-code-backends-infra--current-terminal-backend)
+             (lambda () 'vterm)))
+    (should-error
+     (ai-code-backends-infra--terminal-dispatch "nonexistent-operation")
+     :type 'error)))
+
+(ert-deftest test-ai-code-backends-infra-terminal-dispatch-install-cursor-sync ()
+  "Dispatch should route install-navigation-cursor-sync to the correct backend."
+  (let ((called nil))
+    (cl-letf (((symbol-function 'ai-code-backends-infra--current-terminal-backend)
+               (lambda () 'eat))
+              ((symbol-function 'ai-code-backends-infra-eat-install-navigation-cursor-sync)
+               (lambda () (setq called t))))
+      (ai-code-backends-infra--terminal-dispatch "install-navigation-cursor-sync")
+      (should called))))
 
 (provide 'test_ai-code-backends-infra)
 

@@ -14,21 +14,17 @@
 (require 'cl-lib)  ; For `cl-subseq`
 (require 'imenu)
 (require 'magit)
-(require 'project)
+(require 'ai-code-utils)
 (require 'ai-code-session-link)
 (require 'subr-x)
 
 (declare-function browse-url "browse-url" (url &optional new-window))
 (declare-function helm-comp-read "helm-mode" (prompt collection &rest args))
-(declare-function project-current "project" (&optional maybe-prompt dir))
-(declare-function project-files "project" (project &optional dirs))
-(declare-function project-root "project" (project))
 (declare-function ai-code-backends-infra--session-buffer-p "ai-code-backends-infra" (buffer))
 (declare-function ai-code-backends-infra--linkify-session-region "ai-code-backends-infra" (start end))
 (declare-function ai-code-backends-infra--terminal-send-string "ai-code-backends-infra" (string))
 (declare-function ai-code-backends-infra--terminal-send-backspace "ai-code-backends-infra" ())
 (declare-function ai-code--prompt-filepath-candidates "ai-code-prompt-mode" ())
-(declare-function ai-code--git-root "ai-code-file" (&optional dir))
 (declare-function ai-code--insert-prompt "ai-code-prompt-mode" (prompt))
 (declare-function whisper-run "whisper" ())
 
@@ -59,6 +55,12 @@ Uses `read-string' directly to avoid `helm-mode' intercepting `completing-read'.
   "Read a string from the user with PROMPT and optional INITIAL-INPUT.
 CANDIDATE-LIST provides additional completion options if provided."
   (funcall ai-code--read-string-fn prompt initial-input candidate-list))
+
+(defun ai-code--confirm-and-send (prompt-label initial-prompt)
+  "Let user edit INITIAL-PROMPT with PROMPT-LABEL, then send to AI.
+Returns non-nil on successful send."
+  (when-let* ((prompt (ai-code-read-string prompt-label initial-prompt)))
+    (ai-code--insert-prompt prompt)))
 
 (defun ai-code-helm-read-string-with-history (prompt history-file-name &optional initial-input candidate-list)
   "Read a string with Helm completion using specified history file.
@@ -190,27 +192,6 @@ original buffer, send it to an AI coding session, or copy it to the clipboard."
 (with-eval-after-load 'helm
   (setq ai-code--read-string-fn #'ai-code-helm-read-string))
 
-(defun ai-code--get-window-files ()
-  "Get a list of unique file paths from all visible windows."
-  (let ((files nil))
-    (dolist (window (window-list))
-      (let ((buffer (window-buffer window)))
-        (when (and buffer (buffer-file-name buffer))
-          (cl-pushnew (buffer-file-name buffer) files :test #'string=))))
-    files))
-
-(defun ai-code--get-context-files-string ()
-  "Get a string of files in the current window for context.
-The current buffer's file is always first."
-  (if (not buffer-file-name)
-      ""
-    (let* ((current-buffer-file-name buffer-file-name)
-           (all-buffer-files (ai-code--get-window-files))
-           (other-buffer-files (remove current-buffer-file-name all-buffer-files))
-           (sorted-files (cons current-buffer-file-name other-buffer-files)))
-      (if sorted-files
-          (concat "\nFiles:\n" (mapconcat #'identity sorted-files "\n"))
-        ""))))
 
 (defun ai-code--imenu-subalist-p (payload)
   "Return non-nil when PAYLOAD looks like an imenu sub-alist."
@@ -604,12 +585,6 @@ END-POS defaults to the current '#' position."
       (list :file text))
      (t nil))))
 
-(defun ai-code--session-project-root ()
-  "Return the best available project root for the current session."
-  (or (when-let ((project (ignore-errors (project-current nil default-directory))))
-        (expand-file-name (project-root project)))
-      (ai-code--git-root)
-      (expand-file-name default-directory)))
 
 (defun ai-code--project-file-candidates (filename)
   "Return possible project file matches for FILENAME."
