@@ -2,6 +2,7 @@
 * Release history
 
 ** Main branch change
+- Refactor: refactor boilerplate cli session start code, and add tests
 
 ** 1.82
 - Feat: Quick prompts 
