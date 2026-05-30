@@ -50,6 +50,104 @@
   "Note: Please only answer the question about the code above, do not make any code changes."
   "Prompt note for question-only requests without code changes.")
 
+(defconst ai-code-change--brief-default-boundaries
+  (concat
+   "Make only the requested code change. Avoid unrelated cleanup. "
+   "Preserve existing functionality unless the goal requires changing it.")
+  "Default boundaries section for structured code-change briefs.")
+
+(defconst ai-code-change--brief-agent-responsibilities
+  (concat
+   "Inspect the relevant files before editing. Plan briefly, then edit the code. "
+   "Run appropriate project verification for the change. "
+   "Fix failures caused by the change.")
+  "Default agent responsibilities section for structured code-change briefs.")
+
+(defconst ai-code-change--brief-verification-evidence
+  "Report the exact verification command(s), result, and any remaining risk or blocker."
+  "Default verification evidence section for structured code-change briefs.")
+
+(defconst ai-code-change--question-brief-default-boundaries
+  "Answer the question only. Do not make code changes."
+  "Default boundaries section for structured question briefs.")
+
+(defconst ai-code-change--flycheck-brief-boundaries
+  (concat
+   "Fix only the listed Flycheck errors in the target scope. "
+   "Preserve existing behavior and avoid unrelated cleanup or refactors.")
+  "Boundaries section for Flycheck fix briefs.")
+
+(defun ai-code--code-change-brief--section (title body)
+  "Return a code-change brief section named TITLE with BODY.
+When BODY is nil or blank, return nil."
+  (when (and (stringp body)
+             (not (string-blank-p body)))
+    (format "%s:\n%s" title (string-trim body))))
+
+(defun ai-code--compose-code-change-brief (&rest plist)
+  "Return a structured agent brief for a code-change request.
+PLIST accepts `:goal', `:scope', `:context', `:boundaries',
+`:clipboard-context', and `:code-change-note'.  The brief is prompt text for
+the agent; Emacs only prepares the handoff and does not perform the engineering
+loop."
+  (let* ((goal (plist-get plist :goal))
+         (scope (plist-get plist :scope))
+         (context (plist-get plist :context))
+         (boundaries (or (plist-get plist :boundaries)
+                         ai-code-change--brief-default-boundaries))
+         (clipboard-context (plist-get plist :clipboard-context))
+         (code-change-note (plist-get plist :code-change-note))
+         (sections
+          (delq nil
+                (list
+                 (ai-code--code-change-brief--section "Goal" goal)
+                 (ai-code--code-change-brief--section "Scope" scope)
+                 (ai-code--code-change-brief--section "Context" context)
+                 (ai-code--code-change-brief--section "Clipboard context" clipboard-context)
+                 (ai-code--code-change-brief--section "Boundaries" boundaries)
+                 (ai-code--code-change-brief--section
+                  "Agent responsibilities"
+                  ai-code-change--brief-agent-responsibilities)
+                 (ai-code--code-change-brief--section
+                  "Verification evidence"
+                  ai-code-change--brief-verification-evidence)
+                 (ai-code--code-change-brief--section "Instruction" code-change-note)))))
+    (mapconcat #'identity sections "\n\n")))
+
+(defun ai-code--compose-question-brief (&rest plist)
+  "Return a structured brief for question-only requests.
+PLIST accepts `:goal', `:scope', `:context', `:clipboard-context',
+`:boundaries', and `:instruction'."
+  (let* ((goal (plist-get plist :goal))
+         (scope (plist-get plist :scope))
+         (context (plist-get plist :context))
+         (clipboard-context (plist-get plist :clipboard-context))
+         (boundaries (or (plist-get plist :boundaries)
+                         ai-code-change--question-brief-default-boundaries))
+         (instruction (plist-get plist :instruction))
+         (sections
+          (delq nil
+                (list
+                 (ai-code--code-change-brief--section "Goal" goal)
+                 (ai-code--code-change-brief--section "Scope" scope)
+                 (ai-code--code-change-brief--section "Context" context)
+                 (ai-code--code-change-brief--section "Clipboard context" clipboard-context)
+                 (ai-code--code-change-brief--section "Boundaries" boundaries)
+                 (ai-code--code-change-brief--section "Instruction" instruction)))))
+    (mapconcat #'identity sections "\n\n")))
+
+(defun ai-code--flycheck-goal-string (scope-description rel-file error-list-string)
+  "Return Flycheck-fix goal text for SCOPE-DESCRIPTION in REL-FILE.
+ERROR-LIST-STRING is the formatted list of diagnostics."
+  (if (string-equal "the entire file" scope-description)
+      (format "Please fix the following Flycheck errors in file %s:\n\n%s"
+              rel-file
+              error-list-string)
+    (format "Please fix the following Flycheck errors in %s of file %s:\n\n%s"
+            scope-description
+            rel-file
+            error-list-string)))
+
 (defun ai-code--is-comment-line (line)
   "Check if LINE is a comment line based on current buffer's comment syntax.
 Returns non-nil if LINE starts with one or more comment characters,
@@ -193,25 +291,30 @@ REGION-ACTIVE indicates whether a region is selected."
          (initial-prompt (ai-code-read-string prompt-label ""))
          (files-context-string (ai-code--get-context-files-string))
          (repo-context-string (ai-code--format-repo-context-info))
+         (scope-string
+          (concat
+           (format "Current file: %s" buffer-file-name)
+           (when region-text
+             (concat "\nSelected region:\n"
+                     (cond
+                      (region-location-info
+                       (concat region-location-info "\n"))
+                      (region-start-line
+                       (format "Start line: %d\n" region-start-line)))
+                     region-text))
+           (when function-name (format "\nFunction: %s" function-name))
+           files-context-string))
          (final-prompt
-          (concat initial-prompt
-                  (when region-text
-                    (concat "\nSelected region:\n"
-                            (cond
-                             (region-location-info
-                              (concat region-location-info "\n"))
-                             (region-start-line
-                              (format "Start line: %d\n" region-start-line)))
-                            region-text))
-                  (when function-name (format "\nFunction: %s" function-name))
-                  files-context-string
-                  repo-context-string
-                  (when (and clipboard-context
-                             (string-match-p "\\S-" clipboard-context))
-                    (concat "\n\nClipboard context:\n" clipboard-context))
-                  (if region-text
-                      (concat "\n" ai-code-change--selected-region-note)
-                    (concat "\n" ai-code-change--generic-note)))))
+          (ai-code--compose-code-change-brief
+           :goal initial-prompt
+           :scope scope-string
+           :context repo-context-string
+           :clipboard-context (and clipboard-context
+                                   (string-match-p "\\S-" clipboard-context)
+                                   clipboard-context)
+           :code-change-note (if region-text
+                                 ai-code-change--selected-region-note
+                               ai-code-change--generic-note))))
     (ai-code--insert-prompt final-prompt)))
 
 (defun ai-code--handle-dired-code-change (arg)
@@ -230,13 +333,14 @@ ARG is the prefix argument."
          (initial-prompt (ai-code-read-string prompt-label ""))
          (repo-context-string (ai-code--format-repo-context-info))
          (final-prompt
-          (concat initial-prompt
-                  "\nSelected files/directories:\n" files-str
-                  repo-context-string
-                  (when (and clipboard-context
-                             (string-match-p "\\S-" clipboard-context))
-                    (concat "\n\nClipboard context:\n" clipboard-context))
-                  (concat "\n" ai-code-change--selected-files-note))))
+          (ai-code--compose-code-change-brief
+           :goal initial-prompt
+           :scope (concat "Selected files/directories:\n" files-str)
+           :context repo-context-string
+           :clipboard-context (and clipboard-context
+                                   (string-match-p "\\S-" clipboard-context)
+                                   clipboard-context)
+           :code-change-note ai-code-change--selected-files-note)))
     (ai-code--insert-prompt final-prompt)))
 
 ;;;###autoload
@@ -535,15 +639,70 @@ ARG controls whether clipboard context is included."
               current-line-number current-line function-context files-context-string))
      (t ""))))
 
+(defun ai-code--implement-todo--scope (context)
+  "Return structured TODO scope text for CONTEXT."
+  (let ((current-line (plist-get context :current-line))
+        (current-line-number (plist-get context :current-line-number))
+        (is-comment (plist-get context :is-comment))
+        (org-todo-section-info (plist-get context :org-todo-section-info))
+        (org-line-number (plist-get context :org-line-number))
+        (org-section-block (plist-get context :org-section-block))
+        (function-context (plist-get context :function-context))
+        (region-text (plist-get context :region-text))
+        (region-location-line (plist-get context :region-location-line))
+        (files-context-string (plist-get context :files-context-string)))
+    (concat
+     (cond
+      (org-todo-section-info
+       (format "Org headline on line %d:\n%s"
+               org-line-number
+               org-section-block))
+      (region-text
+       (format "%s\n%s"
+               region-location-line
+               region-text))
+      (is-comment
+       (format "TODO comment on line %d:\n%s"
+               current-line-number
+               current-line))
+      (t "Current context"))
+     function-context
+     files-context-string)))
+
+(defun ai-code--implement-todo--code-change-boundaries (context)
+  "Return code-change boundaries for TODO CONTEXT."
+  (let ((org-todo-section-info (plist-get context :org-todo-section-info))
+        (region-text (plist-get context :region-text))
+        (is-comment (plist-get context :is-comment)))
+    (cond
+     (org-todo-section-info
+      "Keep the Org headline in place and keep changes scoped to the requested implementation.")
+     ((or region-text is-comment)
+      "Keep the TODO comment in place and ensure it is marked DONE after implementation; avoid unrelated cleanup.")
+     (t ai-code-change--brief-default-boundaries))))
+
 (defun ai-code--implement-todo--final-prompt (prompt context action-intent)
   "Return final prompt from PROMPT, CONTEXT, and ACTION-INTENT."
-  (concat prompt
-          (when (ai-code--implement-todo--clipboard-context-present-p context)
-            (concat "\n\nClipboard context:\n"
-                    (plist-get context :clipboard-context)))
-          (ai-code--format-repo-context-info)
-          (when (string= action-intent "Ask question")
-            (concat "\n" ai-code-change--ask-question-note))))
+  (let* ((ask-question-p (string= action-intent "Ask question"))
+         (clipboard-context
+          (and (ai-code--implement-todo--clipboard-context-present-p context)
+               (plist-get context :clipboard-context))))
+    (if ask-question-p
+        (ai-code--compose-question-brief
+         :goal prompt
+         :scope (ai-code--implement-todo--scope context)
+         :context (ai-code--format-repo-context-info)
+         :clipboard-context clipboard-context
+         :instruction ai-code-change--ask-question-note)
+      (ai-code--compose-code-change-brief
+       :goal prompt
+       :scope (ai-code--implement-todo--scope context)
+       :context (ai-code--format-repo-context-info)
+       :clipboard-context clipboard-context
+       :boundaries (ai-code--implement-todo--code-change-boundaries context)
+       :code-change-note (if (plist-get context :region-text)
+                             ai-code-change--selected-region-note
+                           ai-code-change--generic-note)))))
 
 (defun ai-code--implement-todo--build-and-send-prompt (arg &optional default-action)
   "Build the TODO implementation prompt and insert it.
@@ -673,23 +832,29 @@ or whole file.  Requires the `flycheck` package to be installed and available."
           (if (null errors-in-scope)
               (message "No Flycheck errors found in %s." scope-description)
             (let* ((files-context-string (ai-code--get-context-files-string))
+                   (repo-context-string (ai-code--format-repo-context-info))
                    (error-list-string
                     (ai-code-flycheck--format-error-list errors-in-scope
                                                          rel-file))
-                    (prompt
-                     (if (string-equal "the entire file" scope-description)
-                         (format "Please fix the following Flycheck errors in file %s:\n\n%s\n%s\n%s"
-                                 rel-file error-list-string
-                                 files-context-string
-                                 ai-code-change--generic-note)
-                       (format "Please fix the following Flycheck errors in %s of file %s:\n\n%s\n%s\n%s"
-                               scope-description
-                               rel-file
-                               error-list-string
-                               files-context-string
-                               ai-code-change--generic-note)))
-                    (edited-prompt (ai-code-read-string "Edit prompt for AI: "
-                                                        prompt)))
+                   (scope-string
+                    (concat
+                     (format "Current file: %s\nTarget scope: %s"
+                             buffer-file-name
+                             scope-description)
+                     files-context-string))
+                   (goal-string
+                    (ai-code--flycheck-goal-string scope-description
+                                                   rel-file
+                                                   error-list-string))
+                   (prompt
+                    (ai-code--compose-code-change-brief
+                     :goal goal-string
+                     :scope scope-string
+                     :context repo-context-string
+                     :boundaries ai-code-change--flycheck-brief-boundaries
+                     :code-change-note ai-code-change--generic-note))
+                   (edited-prompt (ai-code-read-string "Edit prompt for AI: "
+                                                       prompt)))
               (when (and edited-prompt (not (string-blank-p edited-prompt)))
                 (ai-code--insert-prompt edited-prompt)
                 (message "Generated prompt to fix %d Flycheck error(s) in %s."

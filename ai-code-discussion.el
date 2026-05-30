@@ -11,6 +11,7 @@
 
 (require 'which-func)
 (require 'savehist)
+(require 'subr-x)
 
 (require 'ai-code-input)
 (require 'ai-code-prompt-mode)
@@ -39,8 +40,9 @@
 
 (defun ai-code--ensure-note-request-history ()
   "Register persistent minibuffer history for note requests.
-Only adds the variable to savehist tracking; does not enable savehist-mode.
-Users should enable savehist-mode in their Emacs configuration to persist history."
+Only adds the variable to savehist tracking; does not enable
+`savehist-mode'.  Users should enable it in their Emacs configuration
+to persist history."
   (add-to-list 'savehist-additional-variables 'ai-code-note-request-history))
 
 (ai-code--ensure-note-request-history)
@@ -52,6 +54,18 @@ Users should enable savehist-mode in their Emacs configuration to persist histor
 (defconst ai-code-discussion--selected-region-note
   "Note: This is a question about the selected region - please do not modify the code."
   "Prompt note for question-only requests about the selected region.")
+
+(defconst ai-code-discussion--exception-investigation-boundaries
+  "Investigate first. Do not make code changes."
+  "Boundaries for exception investigation prompts.")
+
+(defconst ai-code-discussion--exception-investigation-note
+  (concat
+   ai-code-discussion--question-only-note
+   "\n"
+   "Report root cause, relevant evidence, and candidate next steps. "
+   "Include at least one candidate next step that explains how to fix the issue.")
+  "Instruction for exception investigation prompts.")
 
 (defconst ai-code-discussion--explain-selected-files-prefix
   "Please explain the selected files or directories."
@@ -168,10 +182,12 @@ CLIPBOARD-CONTEXT is optional clipboard text to append as context."
                          (t nil)))
          (git-relative-files (when context-files
                               (ai-code--get-git-relative-paths context-files)))
-         (files-context-string (when git-relative-files
-                                (concat "\nFiles:\n"
-                                       (mapconcat (lambda (f) (concat "@" f))
-                                                 git-relative-files "\n"))))
+         (scope-string
+          (if git-relative-files
+              (concat "Selected files/directories:\n"
+                      (mapconcat (lambda (f) (concat "@" f))
+                                 git-relative-files "\n"))
+            (format "Current directory: %s" default-directory)))
          (prompt-label (cond
                         ((and clipboard-context
                               (string-match-p "\\S-" clipboard-context))
@@ -185,13 +201,15 @@ CLIPBOARD-CONTEXT is optional clipboard text to append as context."
                         (t "General question about directory: ")))
          (question (ai-code-read-string prompt-label ""))
          (repo-context-string (ai-code--format-repo-context-info))
-         (final-prompt (concat question
-                                files-context-string
-                                repo-context-string
-                                (when (and clipboard-context
-                                           (string-match-p "\\S-" clipboard-context))
-                                  (concat "\n\nClipboard context:\n" clipboard-context))
-                                (concat "\n" ai-code-discussion--question-only-note))))
+         (final-prompt
+          (ai-code--compose-question-brief
+           :goal question
+           :scope scope-string
+           :context repo-context-string
+           :clipboard-context (and clipboard-context
+                                   (string-match-p "\\S-" clipboard-context)
+                                   clipboard-context)
+           :instruction ai-code-discussion--question-only-note)))
     (ai-code--insert-prompt final-prompt)))
 
 (defun ai-code--ask-question-file (clipboard-context)
@@ -234,23 +252,30 @@ CLIPBOARD-CONTEXT is optional clipboard text to append as context."
          (question (ai-code-read-string prompt-label ""))
          (files-context-string (ai-code--get-context-files-string))
          (repo-context-string (ai-code--format-repo-context-info))
+         (scope-string
+          (concat
+           (if buffer-file-name
+               (format "Current file: %s" buffer-file-name)
+             (format "Current buffer: %s" (buffer-name)))
+           (when region-text
+             (concat "\nSelected region:\n"
+                     (when region-location-info
+                       (concat region-location-info "\n"))
+                     region-text))
+           (when function-name
+             (format "\nFunction: %s" function-name))
+           files-context-string))
          (final-prompt
-          (concat question
-                  (when region-text
-                    (concat "\nSelected region:\n"
-                            (when region-location-info
-                              (concat region-location-info "\n"))
-                            region-text))
-                  (when function-name
-                    (format "\nFunction: %s" function-name))
-                   files-context-string
-                   repo-context-string
-                   (when (and clipboard-context
-                              (string-match-p "\\S-" clipboard-context))
-                     (concat "\n\nClipboard context:\n" clipboard-context))
-                   (if region-text
-                       (concat "\n" ai-code-discussion--selected-region-note)
-                     (concat "\n" ai-code-discussion--question-only-note)))))
+          (ai-code--compose-question-brief
+           :goal question
+           :scope scope-string
+           :context repo-context-string
+           :clipboard-context (and clipboard-context
+                                   (string-match-p "\\S-" clipboard-context)
+                                   clipboard-context)
+           :instruction (if region-text
+                            ai-code-discussion--selected-region-note
+                          ai-code-discussion--question-only-note))))
     (ai-code--insert-prompt final-prompt)))
 
 (defun ai-code--get-git-relative-paths (file-paths)
@@ -306,9 +331,9 @@ Argument ARG is the prefix argument."
          (function-name (which-function))
          (files-context-string (ai-code--get-context-files-string))
          (repo-context-string (ai-code--format-repo-context-info))
-         (context-section
+         (diagnostic-context
           (if full-buffer-context
-              (concat "\n\nContext:\n" full-buffer-context)
+              full-buffer-context
             (let ((context-blocks nil))
               (when clipboard-content
                 (push (concat "Clipboard context (error/exception):\n" clipboard-content)
@@ -320,9 +345,11 @@ Argument ARG is the prefix argument."
                 (push (concat "Selected code:\n" region-text)
                       context-blocks))
               (when context-blocks
-                (concat "\n\nContext:\n"
-                        (mapconcat #'identity (nreverse context-blocks) "\n\n"))))))
-         (default-question "How to fix the error in this code? Please analyze the error, explain the root cause, and provide the corrected code to resolve the issue: ")
+                (mapconcat #'identity (nreverse context-blocks) "\n\n")))))
+         (default-question
+          (concat
+           "Investigate this error. Explain the likely root cause and suggest "
+           "candidate next steps, including how to fix it: "))
          (prompt-label
           (cond
            (clipboard-content
@@ -339,16 +366,28 @@ Argument ARG is the prefix argument."
             (format "Investigate exceptions in function %s: " function-name))
            (t "Investigate exceptions in code: ")))
          (initial-prompt (ai-code-read-string prompt-label default-question))
+         (scope-string
+          (concat
+           (if buffer-file
+               (format "Current file: %s" buffer-file)
+             (format "Current buffer: %s" (buffer-name)))
+           (when function-name
+             (format "\nFunction: %s" function-name))
+           files-context-string))
+         (context-string
+          (string-trim
+           (concat
+            (or diagnostic-context "")
+            (when (and diagnostic-context repo-context-string)
+              "\n\n")
+            repo-context-string)))
          (final-prompt
-          (concat initial-prompt
-                  context-section
-                  (when function-name (format "\nFunction: %s" function-name))
-                  files-context-string
-                  repo-context-string
-                  (concat "\n\nNote: Please focus on how to fix the error. Your response should include:\n"
-                          "1. A brief explanation of the root cause of the error.\n"
-                          "2. A code snippet with the fix.\n"
-                          "3. An explanation of how the fix addresses the error."))))
+          (ai-code--compose-question-brief
+           :goal initial-prompt
+           :scope scope-string
+           :context context-string
+           :boundaries ai-code-discussion--exception-investigation-boundaries
+           :instruction ai-code-discussion--exception-investigation-note)))
          (ai-code--insert-prompt final-prompt)))
 
 ;;;###autoload
@@ -795,7 +834,8 @@ NOTE-REQUEST is included in the prompt body."
 ;;;###autoload
 (defun ai-code-take-notes (&optional arg)
   "Take notes by AI request and send prompt to the AI session.
-When in an Org buffer with a saved file, generates a prompt to insert note content.
+When in an Org buffer with a saved file, generate a prompt to insert
+note content.
 Otherwise, generates a prompt to create a new note file.
 With prefix ARG, open the default note file in other window instead."
   (interactive "P")
