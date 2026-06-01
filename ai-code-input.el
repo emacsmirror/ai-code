@@ -28,8 +28,8 @@
 (declare-function ai-code--insert-prompt "ai-code-prompt-mode" (prompt))
 (declare-function whisper-run "whisper" ())
 
-(defvar whisper-after-transcription-hook nil
-  "Hook run by whisper.el after transcription finishes.")
+(eval-when-compile
+  (defvar whisper-after-transcription-hook))
 
 (defconst ai-code--speech-to-text-buffer-name "*whisper-stdout*"
   "Buffer name used by whisper.el transcription output.")
@@ -189,12 +189,18 @@ original buffer, send it to an AI coding session, or copy it to the clipboard."
 (when (featurep 'helm)
   (setq ai-code--read-string-fn #'ai-code-helm-read-string))
 
-(with-eval-after-load 'helm
-  (setq ai-code--read-string-fn #'ai-code-helm-read-string))
+(defun ai-code--enable-helm-read-string (&rest _args)
+  "Enable Helm-backed prompt reading after Helm is loaded."
+  (when (featurep 'helm)
+    (setq ai-code--read-string-fn #'ai-code-helm-read-string)
+    (remove-hook 'after-load-functions #'ai-code--enable-helm-read-string)))
+
+(unless (featurep 'helm)
+  (add-hook 'after-load-functions #'ai-code--enable-helm-read-string))
 
 
 (defun ai-code--imenu-subalist-p (payload)
-  "Return non-nil when PAYLOAD looks like an imenu sub-alist."
+  "Return non-nil when PAYLOAD resembles an imenu sub-alist."
   (and (listp payload)
        (cl-some (lambda (entry)
                   (and (consp entry) (stringp (car entry))))
@@ -235,7 +241,7 @@ original buffer, send it to an AI coding session, or copy it to the clipboard."
         (line-end-position))))))
 
 (defun ai-code--imenu-noise-name-p (name)
-  "Return non-nil when NAME looks like an imenu group/template label."
+  "Return non-nil when NAME resembles an imenu group/template label."
   (or (not (stringp name))
       (string-empty-p (string-trim name))
       (string-match-p "\\`\\*.*\\*\\'" name)
@@ -273,7 +279,7 @@ original buffer, send it to an AI coding session, or copy it to the clipboard."
 
 ;;;###autoload
 (defun ai-code-insert-function-at-point ()
-  "Insert a function name selected from current windows' prog-mode buffers."
+  "Insert a function name selected from current windows' `prog-mode' buffers."
   (interactive)
   (let ((functions nil))
     (dolist (window (window-list))
@@ -377,7 +383,7 @@ END-POS defaults to the current '#' position."
                    (symbol (ai-code--choose-symbol-from-file file)))
          (when (not (string-empty-p symbol))
            (delete-char -1)  ; Remove the '#' we just typed
-           (insert (concat "#" symbol))))))))
+          (insert "#" symbol)))))))
 
 (defun ai-code--session-auto-trigger-filepath-completion ()
   "Auto trigger file path/symbol completion in AI session buffers."
@@ -513,7 +519,7 @@ END-POS defaults to the current '#' position."
 (defun ai-code--session-link-property-at-point ()
   "Return the clickable session link text at point, or nil."
   (or (get-text-property (point) 'ai-code-session-link)
-      (when (> (point) (point-min))
+      (when (not (bobp))
         (get-text-property (1- (point)) 'ai-code-session-link))))
 
 (defun ai-code--session-link-bounds-at-point ()

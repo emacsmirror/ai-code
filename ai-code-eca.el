@@ -3,8 +3,7 @@
 ;; Copyright (C) 2026
 ;; Author: davidwuchn
 ;; Version: 0.2
-;; Package-Requires: ((emacs "29.1"))
-;; Keywords: ai, code, assistant, eca
+;; Keywords: tools, convenience
 ;; SPDX-License-Identifier: Apache-2.0
 
 ;;; Commentary:
@@ -33,9 +32,7 @@
 (require 'eca-chat nil t)
 (require 'eca-process nil t)
 
-;;; ==============================================================================
-;;; Binary Upgrade Configuration
-;;; ==============================================================================
+;;; Binary Upgrade Configuration:
 
 (defcustom ai-code-eca-upgrade-auto-enabled nil
   "When non-nil, check for ECA binary updates once per day at idle."
@@ -64,12 +61,13 @@
 (declare-function transient-append-suffix "transient" (prefix loc suffix &optional face))
 (declare-function transient-remove-suffix "transient" (prefix suffix))
 
-(defvar eca--sessions nil)
-(defvar eca--session-id-cache nil)
-(defvar eca-process--latest-server-version nil)
-(defvar eca-server-install-path nil)
-(defvar eca-server-version-file-path nil)
-(defvar package-vc-selected-packages nil)
+(eval-when-compile
+  (defvar eca--sessions)
+  (defvar eca--session-id-cache)
+  (defvar eca-process--latest-server-version)
+  (defvar eca-server-install-path)
+  (defvar eca-server-version-file-path)
+  (defvar package-vc-selected-packages))
 
 (declare-function ai-code-eca-upgrade--curl-download-string "ai-code-eca" (url))
 (declare-function ai-code-eca-upgrade--curl-download-file "ai-code-eca"
@@ -105,10 +103,11 @@ With FORCE-PROMPT (prefix arg), force new session."
 (defun ai-code-eca--ensure-available ()
   "Ensure ECA package and functions are available."
   (unless (require 'eca nil t)
-    (user-error "ECA not available. Install with: M-x package-install RET eca RET"))
+    (user-error "ECA not available; install with: M-x package-install RET eca RET"))
   (dolist (fn '(eca eca-session eca-chat-open eca-chat--get-last-buffer))
     (unless (fboundp fn)
-      (user-error "ECA missing function: %s. Reinstall eca package" fn))))
+      (user-error "ECA missing function: %s; reinstall eca package" fn)))
+  (ai-code-eca--ensure-cleanup-hooks))
 
 ;;; Menu Integration - ECA group in ai-code-menu
 
@@ -171,17 +170,28 @@ Only adds when ECA is the current backend."
       (error
        (message "Failed to remove ECA menu: %s" (error-message-string err))))))
 
-(with-eval-after-load 'ai-code
-  (advice-add 'ai-code-set-backend :after
-              (lambda (backend)
-                (if (eq backend 'eca)
-                    (ai-code-eca--add-menu-group)
-                  (ai-code-eca--remove-menu-group)))))
+(defun ai-code-eca--after-set-backend (backend)
+  "Update the ECA menu entries after selecting BACKEND."
+  (if (eq backend 'eca)
+      (ai-code-eca--add-menu-group)
+    (ai-code-eca--remove-menu-group)))
+
+(defun ai-code-eca--setup-ai-code-integration (&rest _args)
+  "Install ECA integration once `ai-code' is loaded."
+  (when (featurep 'ai-code)
+    (unless (advice-member-p #'ai-code-eca--after-set-backend
+                             'ai-code-set-backend)
+      (advice-add 'ai-code-set-backend :after
+                  #'ai-code-eca--after-set-backend))
+    (remove-hook 'after-load-functions
+                 #'ai-code-eca--setup-ai-code-integration)))
+
+(if (featurep 'ai-code)
+    (ai-code-eca--setup-ai-code-integration)
+  (add-hook 'after-load-functions #'ai-code-eca--setup-ai-code-integration))
 
 
-;;; ============================================================
-;;; Session Multiplexing & Workspace Management
-;;; ============================================================
+;;; Session Multiplexing and Workspace Management:
 
 (declare-function eca-create-session "eca-util" (workspace-folders))
 (declare-function eca-delete-session "eca-util" (session))
@@ -269,6 +279,12 @@ Auto-apply shared context if any."
       (pop-to-buffer (eca-chat--get-last-buffer session))
       session)))
 
+(defun ai-code-eca--session-workspace-folders (session)
+  "Return workspace folders for ECA SESSION."
+  (if (and (listp session) (plist-member session :workspace-folders))
+      (plist-get session :workspace-folders)
+    (eca--session-workspace-folders session)))
+
 (defun ai-code-eca--find-session-by-workspace (workspace-root)
   "Find an existing session that has WORKSPACE-ROOT in its workspace folders.
 Returns the session if found, nil otherwise."
@@ -277,13 +293,14 @@ Returns the session if found, nil otherwise."
       (cl-find-if
        (lambda (session)
          (member target (mapcar #'expand-file-name
-                                (eca--session-workspace-folders session))))
+                                (ai-code-eca--session-workspace-folders
+                                 session))))
        (eca-vals eca--sessions)))))
 
 (defun ai-code-eca-create-session-for-workspace (&optional _arg)
   "Start ECA session for a selected workspace.
 Prompt for workspace root, then create or reuse session for that workspace.
-If a session already exists with this workspace, reuse it instead of creating new."
+Reuse an existing session for that workspace when possible."
   (interactive "P")
   (let* ((proj (project-current nil default-directory))
          (default-dir (if proj (project-root proj) default-directory))
@@ -297,7 +314,8 @@ If a session already exists with this workspace, reuse it instead of creating ne
              (eca-process-start existing-session
                                 (lambda ()
                                   (eca--initialize existing-session))
-                                (-partial #'eca--handle-message existing-session)))
+                                (apply-partially #'eca--handle-message
+                                                 existing-session)))
             ('started
              (eca-chat-open existing-session))
             ('starting
@@ -311,7 +329,7 @@ If a session already exists with this workspace, reuse it instead of creating ne
              (eca-process-start session
                                 (lambda ()
                                   (eca--initialize session))
-                                (-partial #'eca--handle-message session)))
+                                (apply-partially #'eca--handle-message session)))
             ('started
              (eca-chat-open session))
             ('starting
@@ -373,9 +391,9 @@ SESSION defaults to the current session.  Return the removed folder."
       (unless (member folder existing)
         (user-error "Folder not in workspace: %s" folder))
       (let ((raw-folder (nth (seq-position existing folder) existing-raw)))
-        (with-no-warnings
-          (setf (eca--session-workspace-folders sess)
-                (remove raw-folder existing-raw)))
+        (funcall #'(setf eca--session-workspace-folders)
+                 (remove raw-folder existing-raw)
+                 sess)
         (when (fboundp 'eca-api-notify)
           (eca-api-notify
            sess
@@ -513,7 +531,8 @@ Set to nil to disable stale-file cleanup.")
                   count (/ ai-code-eca--temp-file-max-age 3600))))))
 
 (defun ai-code-eca--register-temp-file (file-path &optional session)
-  "Register FILE-PATH for cleanup on exit or session end."
+  "Register FILE-PATH for cleanup on exit or SESSION end."
+  (ai-code-eca--ensure-cleanup-hooks)
   (when (and file-path (file-exists-p file-path))
     (let* ((sid (if session
                     (if (numberp session) session (eca--session-id session))
@@ -525,8 +544,15 @@ Set to nil to disable stale-file cleanup.")
         (push (cons sid (list file-path)) ai-code-eca--context-temp-files)))
     file-path))
 
-(add-hook 'kill-emacs-hook #'ai-code-eca--cleanup-temp-context-files)
-(run-with-timer 3600 3600 #'ai-code-eca--cleanup-stale-temp-files)
+(defvar ai-code-eca--cleanup-timer nil
+  "Timer used to clean stale ECA context temp files.")
+
+(defun ai-code-eca--ensure-cleanup-hooks ()
+  "Install ECA temp-file cleanup hooks."
+  (add-hook 'kill-emacs-hook #'ai-code-eca--cleanup-temp-context-files)
+  (unless (timerp ai-code-eca--cleanup-timer)
+    (setq ai-code-eca--cleanup-timer
+          (run-with-timer 3600 3600 #'ai-code-eca--cleanup-stale-temp-files))))
 
 ;;; Automatic Workspace / Session Management
 
@@ -578,7 +604,7 @@ Keys currently used are :files and :repo-maps.
         (file-name-directory file-path))))
 
 (defun ai-code-eca--session-for-project-root (project-root)
-  "Find the ECA session whose workspace contains PROJECT-ROOT."
+  "Find the ECA session whose workspace includes PROJECT-ROOT."
   (let* ((root (ai-code-eca--normalize-folder-path project-root))
          (sessions (ai-code-eca-list-sessions)))
     (cl-dolist (info sessions)
@@ -613,11 +639,11 @@ If the project is already present in the workspace, do nothing."
              (message "Auto-added project to ECA session %d: %s"
                       (eca--session-id session) root))
             ('prompt
-             (when (y-or-n-p (format "Add project to ECA workspace? (%s) " root))
+             (when (y-or-n-p (format "Add project to ECA workspace (%s)? " root))
                (eca--session-add-workspace-folder session root)))))))))
 
 (defun ai-code-eca--auto-switch-session-hook (&optional _frame)
-  "Auto-switch ECA sessions when the active project changes."
+  "Auto-switch ECA sessions when the active project is different."
   (when (and ai-code-eca-auto-switch-session
              buffer-file-name
              (featurep 'eca)
@@ -677,10 +703,18 @@ If the project is already present in the workspace, do nothing."
                  (when session
                    (eca-chat-open session)))))))))))
 
-(with-eval-after-load 'eca
-  (add-hook 'find-file-hook #'ai-code-eca--auto-add-workspace-hook)
-  (add-hook 'find-file-hook #'ai-code-eca--auto-create-session-hook 90)
-  (add-hook 'window-buffer-change-functions #'ai-code-eca--auto-switch-session-hook))
+(defun ai-code-eca--setup-eca-hooks (&rest _args)
+  "Install hooks that depend on the ECA package."
+  (when (featurep 'eca)
+    (add-hook 'find-file-hook #'ai-code-eca--auto-add-workspace-hook)
+    (add-hook 'find-file-hook #'ai-code-eca--auto-create-session-hook 90)
+    (add-hook 'window-buffer-change-functions
+              #'ai-code-eca--auto-switch-session-hook)
+    (remove-hook 'after-load-functions #'ai-code-eca--setup-eca-hooks)))
+
+(if (featurep 'eca)
+    (ai-code-eca--setup-eca-hooks)
+  (add-hook 'after-load-functions #'ai-code-eca--setup-eca-hooks))
 
 ;;; Shared Context
 
@@ -707,7 +741,7 @@ If the project is already present in the workspace, do nothing."
     (message "Shared repo map across all ECA sessions: %s" root)))
 
 (defun ai-code-eca--apply-shared-context-internal (session)
-  "Apply shared context to SESSION without interactive checks."
+  "Apply shared context to SESSION without interactive queries."
   (let ((files (plist-get ai-code-eca--shared-context :files))
         (repo-maps (plist-get ai-code-eca--shared-context :repo-maps)))
     (when (or files repo-maps)
@@ -742,7 +776,7 @@ If the project is already present in the workspace, do nothing."
         (progn
           (eca-chat-open session)
           (eca-chat-send-prompt line))
-      (user-error "No ECA session. Run M-x ai-code-eca-start first"))))
+      (user-error "No ECA session; run M-x ai-code-eca-start first"))))
 
 (defun ai-code-eca-resume (&optional _arg)
   "Resume/switch to ECA chat buffer.
@@ -753,7 +787,7 @@ ARG is ignored (for backend interface compatibility)."
 (defun ai-code-eca-upgrade-package ()
   "Upgrade ECA Emacs package.
 
-If installed via package-vc, uses package-vc-upgrade.
+If installed via `package-vc', uses `package-vc-upgrade'.
 Otherwise uses package.el to refresh and reinstall."
   (interactive)
   (cond
@@ -783,12 +817,10 @@ ECA manages skills as files under ~/.eca/ or project .eca/ directory."
 
 ;;; Aliases for menu compatibility
 
-(defalias 'ai-code-eca-switch-session 'ai-code-eca-switch-to-session
+(defalias 'ai-code-eca-switch-session #'ai-code-eca-switch-to-session
   "Alias for `ai-code-eca-switch-to-session' for menu compatibility.")
 
-;;; ==============================================================================
-;;; Binary Upgrade System
-;;; ==============================================================================
+;;; Binary Upgrade System:
 
 (defvar ai-code-eca-upgrade--pinned-version "0.115.0"
   "Pinned fallback version when binary and GitHub API are unavailable.")
@@ -832,19 +864,21 @@ ECA manages skills as files under ~/.eca/ or project .eca/ directory."
                    (age   (float-time (time-subtract (current-time) mtime))))
               (< age 86400)))))
 
-(with-eval-after-load 'eca-process
+(defun ai-code-eca--setup-eca-process (&rest _args)
+  "Install ECA process download customizations after ECA is loaded."
+  (when (featurep 'eca-process)
 
-  (setopt eca-server-install-path (expand-file-name (if (eq system-type 'windows-nt) "eca/eca.exe" "eca/eca")
-                                                    user-emacs-directory)
-          eca-server-version-file-path (expand-file-name "eca/eca-version" user-emacs-directory))
+    (setopt eca-server-install-path (expand-file-name (if (eq system-type 'windows-nt) "eca/eca.exe" "eca/eca")
+                                                      user-emacs-directory)
+            eca-server-version-file-path (expand-file-name "eca/eca-version" user-emacs-directory))
 
-  (let* ((vfile (or (bound-and-true-p eca-server-version-file-path)
-                    (expand-file-name "eca/eca-version" user-emacs-directory)))
-         (version (ai-code-eca-upgrade--resolve-version)))
-    (unless (file-exists-p vfile)
-      (make-directory (file-name-directory vfile) t)
-      (write-region version nil vfile nil 'silent))
-    (setq eca-process--latest-server-version version))
+    (let* ((vfile (or (bound-and-true-p eca-server-version-file-path)
+                      (expand-file-name "eca/eca-version" user-emacs-directory)))
+           (version (ai-code-eca-upgrade--resolve-version)))
+      (unless (file-exists-p vfile)
+        (make-directory (file-name-directory vfile) t)
+        (write-region version nil vfile nil 'silent))
+      (setq eca-process--latest-server-version version))
 
   (defun ai-code-eca-upgrade--curl-download-string (url)
     "Rewrite URL to /releases/latest for faster download."
@@ -922,8 +956,13 @@ ECA manages skills as files under ~/.eca/ or project .eca/ directory."
       (make-directory (file-name-directory ai-code-eca-upgrade--last-check-file) t)
       (write-region "" nil ai-code-eca-upgrade--last-check-file nil 'silent)))
 
-  (run-with-idle-timer ai-code-eca-upgrade-auto-idle-seconds t
-                        #'ai-code-eca-upgrade--auto-maybe))
+    (run-with-idle-timer ai-code-eca-upgrade-auto-idle-seconds t
+                         #'ai-code-eca-upgrade--auto-maybe)
+    (remove-hook 'after-load-functions #'ai-code-eca--setup-eca-process)))
+
+(if (featurep 'eca-process)
+    (ai-code-eca--setup-eca-process)
+  (add-hook 'after-load-functions #'ai-code-eca--setup-eca-process))
 
 ;;;###autoload
 (defun ai-code-eca-upgrade-binary (&optional silent)
@@ -934,7 +973,7 @@ If update available, downloads platform zip, verifies SHA256,
 installs new binary into `eca-server-install-path'.
 
 Progress shown in *eca-update* buffer.
-With prefix arg or SILent non-nil, suppress buffer."
+With prefix arg or SILENT non-nil, suppress buffer."
   (interactive "P")
   (let* ((buf (and (not silent) (get-buffer-create "*eca-update*")))
          (log (lambda (fmt &rest args)
@@ -951,7 +990,7 @@ With prefix arg or SILent non-nil, suppress buffer."
         (insert "=== ECA Binary Update ===\n\n"))
       (display-buffer buf))
     (let ((curl (or (executable-find "curl") (executable-find "curl.exe"))))
-      (unless curl (user-error "ai-code-eca-upgrade-binary: curl not found"))
+      (unless curl (user-error "Ai-code-eca-upgrade-binary: curl not found"))
       (funcall log "Checking latest version from GitHub...")
       (let* ((api-url "https://api.github.com/repos/editor-code-assistant/eca/releases/latest")
              (raw (string-trim
@@ -960,9 +999,9 @@ With prefix arg or SILent non-nil, suppress buffer."
                             (shell-quote-argument curl)
                             (shell-quote-argument api-url)))))
              (_ (when (string-blank-p raw)
-                  (user-error "ai-code-eca-upgrade-binary: failed to reach GitHub API")))
+                  (user-error "Ai-code-eca-upgrade-binary: failed to reach GitHub API")))
              (_ (unless (string-match "\"tag_name\"\\s-*:\\s-*\"\\([^\"]+\\)\"" raw)
-                  (user-error "ai-code-eca-upgrade-binary: could not parse tag_name")))
+                  (user-error "Ai-code-eca-upgrade-binary: could not parse tag_name")))
              (latest (match-string 1 raw))
              (latest-bare (if (string-match "^v?\\(.*\\)" latest)
                               (match-string 1 latest)
@@ -976,7 +1015,7 @@ With prefix arg or SILent non-nil, suppress buffer."
         (if (not (string-version-lessp installed-bare latest-bare))
             (funcall log "\nAlready up to date.")
           (unless (fboundp 'eca-process--download-url)
-            (user-error "ai-code-eca-upgrade-binary: eca-process not loaded"))
+            (user-error "Ai-code-eca-upgrade-binary: eca-process not loaded"))
           (let* ((zip-url   (eca-process--download-url latest))
                  (store-path eca-server-install-path)
                  (zip-path  (concat store-path ".zip"))
@@ -990,7 +1029,7 @@ With prefix arg or SILent non-nil, suppress buffer."
                                       "-L" "-f" "--progress-bar"
                                       "-o" zip-path zip-url)))
               (unless (= exit 0)
-                (user-error "ai-code-eca-upgrade-binary: download failed (curl exit %d)" exit)))
+                (user-error "Ai-code-eca-upgrade-binary: download failed (curl exit %d)" exit)))
             (funcall log "Download complete.")
             (funcall log "\nVerifying SHA256...")
             (call-process curl nil nil nil
@@ -1005,9 +1044,9 @@ With prefix arg or SILent non-nil, suppress buffer."
                      (t nil))))
               (cond
                ((not sha-available)
-                (funcall log "Warning: SHA256 asset not available — skipping verification."))
+                (funcall log "Warning: SHA256 asset not available; skipping verification"))
                ((not shasum-cmd)
-                (funcall log "Warning: sha256sum/shasum not found — skipping verification."))
+                (funcall log "Warning: sha256sum/shasum not found; skipping verification"))
                (t
                 (let* ((expected (car (split-string
                                        (with-temp-buffer
@@ -1019,23 +1058,23 @@ With prefix arg or SILent non-nil, suppress buffer."
                                               shasum-cmd
                                               (shell-quote-argument zip-path)))))))
                   (if (string= expected actual)
-                      (funcall log "SHA256 OK (%s)." actual)
-                    (user-error "SHA256 mismatch — expected %s, got %s. Aborting."
+                      (funcall log "SHA256 OK (%s)" actual)
+                    (user-error "SHA256 mismatch; expected %s, got %s; aborting"
                                 expected actual))))))
             (funcall log "\nExtracting...")
             (unless (executable-find "unzip")
-              (user-error "unzip not found — please install unzip"))
+              (user-error "Unzip not found; please install unzip"))
             (when (file-exists-p temp-dir)
               (delete-directory temp-dir t))
             (make-directory temp-dir t)
             (let ((exit (call-process "unzip" nil buf t
                                       "-o" zip-path "-d" temp-dir)))
               (unless (= exit 0)
-                (user-error "ai-code-eca-upgrade-binary: unzip failed (exit %d)" exit)))
+                (user-error "Ai-code-eca-upgrade-binary: unzip failed (exit %d)" exit)))
             (let ((new-bin (expand-file-name
                             (file-name-nondirectory store-path) temp-dir)))
               (unless (file-exists-p new-bin)
-                (user-error "ai-code-eca-upgrade-binary: expected binary not found after extraction: %s" new-bin))
+                (user-error "Ai-code-eca-upgrade-binary: expected binary not found after extraction: %s" new-bin))
               (when (file-exists-p old-path)
                 (ignore-errors (delete-file old-path)))
               (when (file-exists-p store-path)
@@ -1097,8 +1136,8 @@ Pops up a buffer with version info and buttons to check/update."
 (defun ai-code-eca-upgrade (&optional arg)
   "Upgrade ECA.
 Without ARG, show upgrade status buffer.
-With \\[universal-argument] (C-u), upgrade the ECA binary from GitHub releases.
-With \\[universal-argument] \\[universal-argument] (C-u C-u), upgrade the ECA Emacs package."
+With one universal argument, upgrade the ECA binary from GitHub releases.
+With two universal arguments, upgrade the ECA Emacs package."
   (interactive "P")
   (cond
    ((equal arg '(16)) (ai-code-eca-upgrade-package))
