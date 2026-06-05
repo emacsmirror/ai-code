@@ -147,6 +147,33 @@
       (when (file-directory-p root)
         (delete-directory root t)))))
 
+(ert-deftest ai-code-session-link-test-linkify-session-region-matches-uppercase-project-basename ()
+  "Linkify uppercase or mixed-case basename references for project files."
+  (let* ((root (make-temp-file "ai-code-session-links-uppercase-basename-" t))
+         (src-dir (expand-file-name "src" root))
+         (c-file (expand-file-name "Foo.C" src-dir))
+         (readme-file (expand-file-name "README.MD" src-dir)))
+    (unwind-protect
+        (progn
+          (make-directory src-dir t)
+          (with-temp-file c-file
+            (insert "int main(void) { return 0; }\n"))
+          (with-temp-file readme-file
+            (insert "# README\n"))
+          (with-temp-buffer
+            (setq-local ai-code-backends-infra--session-directory root)
+            (insert "Foo.C:12\nREADME.MD\n")
+            (ai-code-session-link--linkify-session-region (point-min) (point-max))
+            (goto-char (point-min))
+            (search-forward-regexp "Foo\\.C:12")
+            (should (equal (get-text-property (match-beginning 0) 'ai-code-session-link)
+                           "Foo.C:12"))
+            (search-forward-regexp "README\\.MD")
+            (should (equal (get-text-property (match-beginning 0) 'ai-code-session-link)
+                           "README.MD"))))
+      (when (file-directory-p root)
+        (delete-directory root t)))))
+
 (ert-deftest ai-code-session-link-test-linkify-session-region-symbol-near-file-link-across-lines ()
   "Linkify a nearby code symbol after a file link across line breaks."
   (let* ((root (make-temp-file "ai-code-session-links-symbol-nearby-" t))
@@ -408,8 +435,8 @@
       (when (file-directory-p root)
         (delete-directory root t)))))
 
-(ert-deftest ai-code-session-link-test-linkify-session-region-reuses-file-resolution-for-nearby-symbols ()
-  "Resolve each nearby file link once while preserving symbol linkification."
+(ert-deftest ai-code-session-link-test-linkify-session-region-avoids-eager-file-resolution-for-nearby-symbols ()
+  "Linkify nearby symbols without resolving file paths during redraw."
   (let* ((root (make-temp-file "ai-code-session-links-symbol-perf-" t))
          (resolved-paths
           `(("src/user_service.py" . ,(expand-file-name "src/user_service.py" root))
@@ -437,12 +464,12 @@
                              "RequestBuilder"))
               (should (equal (get-text-property symbol-pos 'ai-code-session-link)
                              "src/next_file.py:1")))
-            (should (= resolve-count 2))))
+            (should (zerop resolve-count))))
       (when (file-directory-p root)
         (delete-directory root t)))))
 
-(ert-deftest ai-code-session-link-test-linkify-session-region-reuses-project-files-with-basename-links ()
-  "Reuse project file enumeration while linkifying basename file references."
+(ert-deftest ai-code-session-link-test-linkify-session-region-avoids-project-files-for-basename-links ()
+  "Avoid project file enumeration while linkifying basename references."
   (let* ((root (make-temp-file "ai-code-session-links-project-cache-" t))
          (project-files-count 0))
     (unwind-protect
@@ -475,12 +502,12 @@
                              "RequestBuilder"))
               (should (equal (get-text-property symbol-pos 'ai-code-session-link)
                              "Builder.java:1")))
-            (should (= project-files-count 1))))
+            (should (zerop project-files-count))))
       (when (file-directory-p root)
         (delete-directory root t)))))
 
-(ert-deftest ai-code-session-link-test-linkify-session-region-reuses-project-files-across-passes ()
-  "Repeated relinkify passes should reuse project file enumeration."
+(ert-deftest ai-code-session-link-test-linkify-session-region-skips-project-files-across-passes ()
+  "Repeated relinkify passes should avoid project file enumeration."
   (let* ((root (make-temp-file "ai-code-session-links-project-cache-passes-" t))
          (project-files-count 0)
          (ai-code-session-link-enabled t))
@@ -500,7 +527,35 @@
             (insert "UserService.java:1\n")
             (ai-code-session-link--linkify-session-region (point-min) (point-max))
             (ai-code-session-link--linkify-session-region (point-min) (point-max))
-            (should (= project-files-count 1))))
+            (should (zerop project-files-count))))
+      (when (file-directory-p root)
+        (delete-directory root t)))))
+
+(ert-deftest ai-code-session-link-test--open-file-link-resolves-basename-on-demand ()
+  "Basename file links should still resolve when the user activates them."
+  (let* ((root (make-temp-file "ai-code-session-links-basename-open-" t))
+         (src-dir (expand-file-name "src" root))
+         (file (expand-file-name "Foo.java" src-dir))
+         source-buffer)
+    (unwind-protect
+        (progn
+          (make-directory src-dir t)
+          (with-temp-file file
+            (insert "class Foo {}\nnext line\n"))
+          (cl-letf (((symbol-function 'find-file-other-window)
+                     (lambda (path)
+                       (setq source-buffer (find-file-noselect path))
+                       (set-buffer source-buffer)
+                       source-buffer)))
+            (let ((default-directory root))
+              (let ((ai-code-backends-infra--session-directory root))
+                (should (ai-code-session-link--open-file-link "Foo.java:2"))
+                (should (buffer-live-p source-buffer))
+                (with-current-buffer source-buffer
+                  (should (equal (buffer-file-name) file))
+                  (should (= (line-number-at-pos) 2)))))))
+      (when (and source-buffer (buffer-live-p source-buffer))
+        (kill-buffer source-buffer))
       (when (file-directory-p root)
         (delete-directory root t)))))
 
@@ -555,7 +610,7 @@
                        source-buffer))
                     ((symbol-function 'xref-find-definitions)
                      (lambda (_identifier)
-                       (error "xref unavailable")))
+                       (error "Xref unavailable")))
                     ((symbol-function 'message)
                      (lambda (&rest _args) nil)))
             (with-temp-buffer
@@ -597,7 +652,7 @@
                        source-buffer))
                     ((symbol-function 'xref-find-definitions)
                      (lambda (_identifier)
-                       (error "xref unavailable")))
+                       (error "Xref unavailable")))
                     ((symbol-function 'helm-gtags-find-tag)
                      (lambda (identifier)
                        (setq gtags-symbol identifier)
