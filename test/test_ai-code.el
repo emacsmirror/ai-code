@@ -263,7 +263,7 @@
 (ert-deftest ai-code-test-session-checkpoint-sends-fixed-checkpoint-prompt ()
   "Test that session checkpoint sends the expected fixed prompt."
   (let (inserted-prompt)
-    (cl-letf (((symbol-function 'ai-code-read-string)
+    (cl-letf (((symbol-function 'read-string)
                (lambda (_prompt initial)
                  initial))
               ((symbol-function 'ai-code--insert-prompt)
