@@ -11,11 +11,11 @@ An Emacs interface for AI-assisted software development. *The purpose is to prov
 
 - Currently it supports these AI coding CLIs:
   - [[https://github.com/openai/codex][OpenAI Codex]]
+  - [[https://antigravity.google/product/antigravity-cli][Antigravity CLI]]
+  - [[https://opencode.ai/][Opencode]]
+  - [[https://github.com/anthropics/claude-code][Claude Code]]
   - [[https://docs.github.com/en/copilot/how-tos/use-copilot-agents/use-copilot-cli][GitHub Copilot CLI]]
   - [[https://github.com/google-gemini/gemini-cli][Gemini CLI]]
-  - [[https://antigravity.google/product/antigravity-cli][Antigravity CLI]]
-  - [[https://github.com/anthropics/claude-code][Claude Code]]
-  - [[https://opencode.ai/][Opencode]]
   - [[https://kilo.ai/][Kilo]]
   - [[https://grokcli.io/][Grok CLI]]
   - [[https://docs.cursor.com/en/cli][Cursor CLI]]
@@ -410,15 +410,15 @@ When working with multiple AI sessions, it can be useful to receive desktop noti
 
    Natively supported options:
    - [[https://github.com/openai/codex][OpenAI codex CLI]] (`[[./ai-code-codex-cli.el][ai-code-codex-cli.el]]`)
+   - [[https://antigravity.google/product/antigravity-cli][Antigravity CLI]] (`[[./ai-code-antigravity-cli.el][ai-code-antigravity-cli.el]]`)
+   - [[https://opencode.ai/][Opencode]] (`[[./ai-code-opencode.el][ai-code-opencode.el]]`)
+   - [[https://github.com/anthropics/claude-code][Claude Code]] (`[[./ai-code-claude-code.el][ai-code-claude-code.el]]`)
+     - Binds =Shift+Enter=/=Ctrl+Enter= inside Claude sessions to send Claude's
+       multiline input sequence.
    - [[https://docs.github.com/en/copilot/how-tos/use-copilot-agents/use-copilot-cli][GitHub Copilot CLI]] (`[[./ai-code-github-copilot-cli.el][ai-code-github-copilot-cli.el]]`)
      - Sets =TERM_PROGRAM=vscode= by default and binds =Shift+Enter=/=Ctrl+Enter=
        inside Copilot sessions to emulate Copilot CLI's VS Code multiline setup.
    - [[https://github.com/google-gemini/gemini-cli][Gemini CLI]] (`[[./ai-code-gemini-cli.el][ai-code-gemini-cli.el]]`)
-   - [[https://antigravity.google/product/antigravity-cli][Antigravity CLI]] (`[[./ai-code-antigravity-cli.el][ai-code-antigravity-cli.el]]`)
-   - [[https://github.com/anthropics/claude-code][Claude Code]] (`[[./ai-code-claude-code.el][ai-code-claude-code.el]]`)
-     - Binds =Shift+Enter=/=Ctrl+Enter= inside Claude sessions to send Claude's
-       multiline input sequence.
-   - [[https://opencode.ai/][Opencode]] (`[[./ai-code-opencode.el][ai-code-opencode.el]]`)
    - [[https://kilo.ai/][Kilo]] (`[[./ai-code-kilo.el][ai-code-kilo.el]]`)
    - [[https://grokcli.io/][Grok CLI]] (`[[./ai-code-grok-cli.el][ai-code-grok-cli.el]]`)
    - [[https://docs.cursor.com/en/cli][Cursor CLI]] (`[[./ai-code-cursor-cli.el][ai-code-cursor-cli.el]]`)
@@ -484,6 +484,28 @@ When working with multiple AI sessions, it can be useful to receive desktop noti
 
 ** FAQ
 
+*** Q: When test-after-change / TDD mode is enabled, AI keeps asking for tool-use approval. How can I make this smoother?
+
+- A: Enable auto-approval for your active AI coding CLI. For example, in Codex CLI, you can enable the following flag.
+#+begin_src elisp
+  (setq ai-code-codex-cli-program-switches '("-a" "never"))
+#+end_src
+
+- For antigravity cli, it is
+
+#+begin_src elisp
+  (setq ai-code-antigravity-cli-program-switches '("--dangerously-skip-permissions"))
+#+end_src
+
+- For github copilot cli, it is
+#+begin_src elisp
+  (setq ai-code-github-copilot-cli-program-switches '("--allow-all"))
+#+end_src
+
+*** Q: Codex CLI use my API key, instead of my ChatGPT Plus subscription and cost money, how to fix that?
+
+- A: use `codex login` to login with your OpenAI account that has ChatGPT Plus subscription. After that, Codex CLI will use your ChatGPT Plus subscription automatically. To confirm, check with /status inside the codex CLI buffer.
+
 *** Q: Using Opencode as backend, it might have performance issues with eat.el in Doom Emacs. [[https://github.com/tninja/ai-code-interface.el/issues/9#issuecomment-3543277108][Issue]]
 
 - A: Use vterm as the backend; Opencode won't trigger mouse hover and will not cause Emacs flickering. Setting "theme" to "system" in the Opencode config can reduce glitches. From [[https://github.com/tninja/ai-code-interface.el/issues/9#issuecomment-3543335121][gkzhb's answer]]:
@@ -494,35 +516,19 @@ When working with multiple AI sessions, it can be useful to receive desktop noti
 }
 #+end_src
 
+*** Q: During using ghostel terminal backend, for long conversation, I found the earliest conversation got truncated
+
+- A: Ghostel trims old output after `ghostel-max-scrollback` bytes are used. The default is 5 MB, so increase it before starting Ghostel sessions.
+#+begin_src elisp
+  (setq ghostel-max-scrollback (* 20 1024 1024)) ; 20 MB
+#+end_src
+
 *** Q: Gemini CLI response is relatively slow, how to improve?
 
 - A: use gemini-3-flash model, it is pretty fast, with good quality (being able to solve leetcode hard problems), and it is free. You can set the following in your Emacs config:
 
 #+begin_src elisp
   (setq ai-code-gemini-cli-program-switches '("--model" "gemini-3-flash-preview"))
-#+end_src
-
-*** Q: Codex CLI use my API key, instead of my ChatGPT Plus subscription and cost money, how to fix that?
-
-- A: use `codex login` to login with your OpenAI account that has ChatGPT Plus subscription. After that, Codex CLI will use your ChatGPT Plus subscription automatically. To confirm, check with /status inside the codex CLI buffer.
-
-*** Q: When test-after-change / TDD mode is enabled, AI keeps asking for tool-use approval. How can I make this smoother?
-
-- A: Enable auto-approval for your active AI coding CLI. For example, in Codex CLI, you can enable the following flag.
-#+begin_src elisp
-  (setq ai-code-codex-cli-program-switches '("-a" "never"))
-#+end_src
-
-- For github copilot cli, it is
-#+begin_src elisp
-  (setq ai-code-github-copilot-cli-program-switches '("--allow-all"))
-#+end_src
-
-*** Q: During using ghostel terminal backend, for long conversation, I found the earliest conversation got truncated
-
-- A: Ghostel trims old output after `ghostel-max-scrollback` bytes are used. The default is 5 MB, so increase it before starting Ghostel sessions.
-#+begin_src elisp
-  (setq ghostel-max-scrollback (* 20 1024 1024)) ; 20 MB
 #+end_src
 
 ** AI Assisted Programming related books
