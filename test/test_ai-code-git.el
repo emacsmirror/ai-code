@@ -15,6 +15,26 @@
 (declare-function difftastic-magit-diff "difftastic" ())
 (declare-function magit-worktree-status "magit-worktree" ())
 
+(ert-deftest ai-code-test-ai-code-git-does-not-eagerly-load-github-module ()
+  "Loading `ai-code-git' should not eagerly load `ai-code-github'."
+  (let ((git-library (locate-library "ai-code-git"))
+        (github-library (locate-library "ai-code-github")))
+    (unwind-protect
+        (progn
+          ;; Isolate the load behavior under test instead of relying on
+          ;; whatever other test files already required globally.
+          (when (featurep 'ai-code-git)
+            (unload-feature 'ai-code-git t))
+          (when (featurep 'ai-code-github)
+            (unload-feature 'ai-code-github t))
+          (load git-library nil 'nomessage)
+          (should (featurep 'ai-code-git))
+          (should-not (featurep 'ai-code-github)))
+      (unless (featurep 'ai-code-git)
+        (load git-library nil 'nomessage))
+      (unless (featurep 'ai-code-github)
+        (load github-library nil 'nomessage)))))
+
 (defun ai-code-test--gitignore-required-entries ()
   "Return the default ignore entries expected from `ai-code-update-git-ignore'."
   (list (concat ai-code-files-dir-name "/")
@@ -236,7 +256,7 @@ other-file"))
       (should (eq captured-fn #'ai-code-git-worktree-branch)))))
 
 (ert-deftest ai-code-test-git-worktree-action-with-prefix-opens-dired ()
-  "With prefix arg, open dired on the repo worktree directory."
+  "With prefix arg, open Dired on the repo worktree directory."
   (let* ((temp-worktree-root (make-temp-file "wt-root" t))
          (repo-dir (expand-file-name "ai-code-interface.el" temp-worktree-root))
          (ai-code-git-worktree-root temp-worktree-root)
@@ -259,7 +279,7 @@ other-file"))
       (should-error (ai-code-git-worktree-action '(4)) :type 'user-error))))
 
 (ert-deftest ai-code-test-git-worktree-branch-opens-dired-after-creation ()
-  "After creating worktree, open dired on the worktree path instead of magit status."
+  "After creating worktree, open Dired on the worktree path instead of Magit status."
   (let* ((temp-worktree-root (make-temp-file "ai-code-worktree-root-" t))
          (ai-code-git-worktree-root temp-worktree-root)
          (git-root "/tmp/sample-repo/")
@@ -330,6 +350,8 @@ other-file"))
                   ((symbol-function 'completing-read)
                    (lambda (_prompt choices &rest _args)
                      (if (listp choices) (car choices) "")))
+                  ((symbol-function 'ai-code-current-backend-label)
+                   (lambda () "Codex"))
                   ((symbol-function 'find-file-other-window)
                    (lambda (file) (setq find-file-called-with file)))
                   ((symbol-function 'ai-code--generate-task-filename)
