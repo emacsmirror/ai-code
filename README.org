@@ -249,6 +249,9 @@ screenshot inside Codex cli:
 
 [[file:./emacs_mcp_tools.png]]
 
+- Emacs mcp use cases
+  - [[./docs/emacs-package-cleanup-with-ai-agent.org][Unused package clean up]]
+
 ***** Use It with an AI CLI
 
 Set the backend to =claude-code=, =codex=, or =github-copilot-cli= and start a session with =C-c a a=. AI Code will:
