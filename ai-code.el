@@ -120,6 +120,7 @@
 (require 'ai-code-prompt-mode)
 (require 'ai-code-agile)
 (require 'ai-code-git)
+(require 'ai-code-github)
 (require 'ai-code-change)
 (require 'ai-code-discussion)
 (require 'ai-code-codex-cli)
