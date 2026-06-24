@@ -2,6 +2,9 @@
 * Release history
 
 ** Main branch change
+
+** 1.86
+- Fix C-c C-c override in org task files
 - Feat: add task file agent handoff across AI backends
 - Chore: Prompt for draft PR selection in PR creation flow
 - Fix: Support Ghostel paste API and add tests
