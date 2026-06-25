@@ -2,6 +2,7 @@
 * Release history
 
 ** Main branch change
+- Chore: Support optional editor context in GitHub issue investigation
 - Feat: improve gptel sync request timeout, truncation, and retry
 
 ** 1.86
