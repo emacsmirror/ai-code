@@ -320,7 +320,7 @@
                  (lambda (_label prompt)
                    (setq sent-prompt prompt))))
         (ai-code-agent-handoff nil)))
-    (should (string-match-p "Use this agent handoff context" sent-prompt))
+    (should (string-match-p "Load this agent handoff context" sent-prompt))
     (should (string-match-p "Goal: finish backend-neutral handoff" sent-prompt))
     (should
      (string-match-p
@@ -342,7 +342,7 @@
                  (lambda (_label prompt)
                    (setq sent-prompt prompt))))
         (ai-code-agent-handoff '(4))))
-    (should (string-match-p "Use this whole task file" sent-prompt))
+    (should (string-match-p "Load this whole task file" sent-prompt))
     (should (string-match-p "Build handoff support" sent-prompt))
     (should (string-match-p "Carry all task notes forward" sent-prompt))))
 

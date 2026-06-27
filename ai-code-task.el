@@ -282,10 +282,9 @@ Return the relevant file paths, matched excerpts, and a concise summary."
   "Build a prompt to load handoff CONTENT.
 WHOLE-FILE-P controls whether CONTENT came from the whole task file."
   (format
-   "Use this %s as portable agent handoff context for the current task.\n\
-Continue from the state described here.  Treat it as backend-neutral context,
-not as a transcript to replay.  Before making changes, restate the next action
-you plan to take.\n\n%s"
+   "Load this %s as portable agent handoff context for future work on the current task.\n\
+Continue from the state described here.  Treat it as backend-neutral reference
+context, not as a transcript to replay. Do not make any code change.\n\n%s"
    (if whole-file-p "whole task file" "agent handoff context")
    content))
 
