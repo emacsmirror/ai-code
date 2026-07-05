@@ -2,6 +2,8 @@
 * Release history
 
 ** Main branch change
+- Fix: Remove citation to ghostel private function (--)
+- Feat: Track Ghostel lifecycle and progress metadata
 - Chore: Prompt for working directory on prefixed AI CLI start/resume
 - Fix: [codex] Normalize vterm dim SGR foreground, by cxa
 - Feat: Add C4 PlantUML architecture document derivation
