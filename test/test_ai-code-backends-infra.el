@@ -183,6 +183,22 @@ The result is a cons of whether SYMBOL is bound and its default value."
         (should (equal (plist-get result :args) '("--resume")))
         (should (equal (plist-get result :command) "claude --resume"))))))
 
+(ert-deftest test-ai-code-backends-infra-session-working-directory-prompts-with-prefix ()
+  "A prefix argument should prompt for the working directory."
+  (let (seen)
+    (cl-letf (((symbol-function 'ai-code--session-project-root)
+               (lambda () "/project/"))
+              ((symbol-function 'read-directory-name)
+               (lambda (&rest args)
+                 (setq seen args)
+                 "/custom/")))
+      (should (equal (ai-code-backends-infra--session-working-directory 'prefix-arg)
+                     "/custom/")))
+    (should (equal (nth 0 seen) "Working directory: "))
+    (should (equal (nth 1 seen) "/project/"))
+    (should (equal (nth 2 seen) "/project/"))
+    (should (eq (nth 3 seen) t))))
+
 (ert-deftest test-ai-code-backends-infra-start-cli-session-forwards-options ()
   "Generic CLI startup should resolve and forward backend options."
   (let ((process-table (make-hash-table :test 'equal))
@@ -191,7 +207,7 @@ The result is a cons of whether SYMBOL is bound and its default value."
         (post-start-fn (lambda (_buffer _process _instance) nil))
         captured)
     (cl-letf (((symbol-function 'ai-code-backends-infra--session-working-directory)
-               (lambda () "/project/"))
+               (lambda (&optional _prompt-p) "/project/"))
               ((symbol-function 'ai-code-backends-infra--resolve-start-command)
                (lambda (program switches arg prompt-label)
                  (should (equal program "codex"))
@@ -228,17 +244,67 @@ The result is a cons of whether SYMBOL is bound and its default value."
                          cleanup-fn
                          nil
                          "codex"
-                         nil
+                         'prefix-arg
                          '("TERM_PROGRAM=vscode")
                          "\r\n"
                          post-start-fn)))))
+
+(ert-deftest test-ai-code-backends-infra-start-cli-session-prompts-dir-after-args ()
+  "Working directory prompting should happen after CLI args prompting.
+The prefix argument should also force instance-name prompting."
+  (let ((process-table (make-hash-table :test 'equal))
+        call-order
+        captured)
+    (cl-letf (((symbol-function 'ai-code--session-project-root)
+               (lambda () "/project/"))
+              ((symbol-function 'ai-code-backends-infra--resolve-start-command)
+               (lambda (program switches arg prompt-label)
+                 (setq call-order (append call-order '(args)))
+                 (should (equal program "codex"))
+                 (should (equal switches '("--quiet")))
+                 (should (eq arg 'prefix-arg))
+                 (should (equal prompt-label "Codex"))
+                 '(:command "codex --quiet")))
+              ((symbol-function 'read-directory-name)
+               (lambda (&rest _args)
+                 (setq call-order (append call-order '(dir)))
+                 "/custom/"))
+              ((symbol-function 'ai-code-backends-infra--toggle-or-create-session)
+               (lambda (&rest args)
+                 (setq captured args))))
+      (ai-code-backends-infra--start-cli-session
+       (list :program "codex"
+             :switches '("--quiet")
+             :label "Codex"
+             :process-table process-table
+             :session-prefix "codex")
+       'prefix-arg))
+    (should (equal call-order '(args dir)))
+    (cl-destructuring-bind
+        (working-dir buffer-name seen-process-table command
+                     &optional escape-fn cleanup-fn instance-name prefix
+                     force-prompt env-vars multiline-input-sequence
+                     post-start-fn)
+        captured
+      (should (equal working-dir "/custom/"))
+      (should-not buffer-name)
+      (should (eq seen-process-table process-table))
+      (should (equal command "codex --quiet"))
+      (should-not escape-fn)
+      (should-not cleanup-fn)
+      (should-not instance-name)
+      (should (equal prefix "codex"))
+      (should (eq force-prompt 'prefix-arg))
+      (should-not env-vars)
+      (should-not multiline-input-sequence)
+      (should-not post-start-fn))))
 
 (ert-deftest test-ai-code-backends-infra-cli-switch-and-send-use-project-session ()
   "CLI wrapper switch and send helpers should resolve project sessions."
   (let (switch-args
         send-args)
     (cl-letf (((symbol-function 'ai-code-backends-infra--session-working-directory)
-               (lambda () "/project/"))
+               (lambda (&optional _prompt-p) "/project/"))
               ((symbol-function 'ai-code-backends-infra--switch-to-session-buffer)
                (lambda (&rest args)
                  (setq switch-args args)))
@@ -254,13 +320,45 @@ The result is a cons of whether SYMBOL is bound and its default value."
                    '(nil "No Codex session for this project"
                          "hello" "codex" "/project/")))))
 
+(ert-deftest test-ai-code-backends-infra-cli-show-resume-picker-prefers-last-accessed-buffer ()
+  "Resume picker helper should reuse the last accessed matching session buffer."
+  (let ((buffer (generate-new-buffer "*codex[test-last]*"))
+        (ai-code-backends-infra--last-accessed-buffer nil)
+        sent
+        select-called)
+    (unwind-protect
+        (progn
+          (setq ai-code-backends-infra--last-accessed-buffer buffer)
+          (with-current-buffer buffer
+            (setq-local ai-code-backends-infra--session-prefix "codex")
+            (insert "prompt")
+            (goto-char (point-max)))
+          (cl-letf (((symbol-function 'ai-code-backends-infra--session-working-directory)
+                     (lambda (&optional _prompt-p) "/project/"))
+                    ((symbol-function 'ai-code-backends-infra--select-session-buffer)
+                     (lambda (&rest _args)
+                       (setq select-called t)
+                       nil))
+                    ((symbol-function 'sit-for)
+                     (lambda (&rest _args) nil))
+                    ((symbol-function 'ai-code-backends-infra--terminal-send-string)
+                     (lambda (string)
+                       (setq sent string))))
+            (ai-code-backends-infra--cli-show-resume-picker "codex")
+            (with-current-buffer buffer
+              (should (equal sent ""))
+              (should (= (point) (point-min))))
+            (should-not select-called)))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
 (ert-deftest test-ai-code-backends-infra-cli-show-resume-picker-pokes-buffer ()
   "Resume picker helper should poke the selected session buffer."
   (let ((buffer (generate-new-buffer "*codex[test]*"))
         sent)
     (unwind-protect
         (cl-letf (((symbol-function 'ai-code-backends-infra--session-working-directory)
-                   (lambda () "/project/"))
+                   (lambda (&optional _prompt-p) "/project/"))
                   ((symbol-function 'ai-code-backends-infra--select-session-buffer)
                    (lambda (prefix working-dir)
                      (should (equal prefix "codex"))

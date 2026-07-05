@@ -16,6 +16,9 @@
 (defvar ai-code-cli)
 (defvar claude-code-terminal-backend)
 
+(eval-when-compile
+  (defvar ai-code-selected-backend))
+
 (declare-function claude-code--do-send-command "claude-code" (cmd))
 (declare-function claude-code--term-send-string "claude-code" (backend string))
 (declare-function ai-code--validate-git-repository "ai-code-git" ())
@@ -113,7 +116,11 @@ Argument _ARG is ignored."
 ;;;###autoload
 (defun ai-code-cli-start (&optional arg)
   "Start the current backend's CLI session when supported.
-Argument ARG is passed to the backend's start function."
+Argument ARG is passed to the backend's start function.
+When called interactively, any prefix argument is forwarded via
+`current-prefix-arg', and it is up to the backend how to interpret
+it (for example, native CLI backends may use a non-nil prefix to
+prompt for CLI arguments and a working directory)."
   (interactive "P")
   (ai-code--activate-effective-backend)
   (prog1
@@ -131,7 +138,7 @@ Noninteractive callers pass ARG to the backend resume function.
 When called interactively, any prefix argument is forwarded via
 `current-prefix-arg', and it is up to the backend how to interpret
 it (for example, some backends may use a non-nil prefix to prompt for
-additional CLI arguments)."
+additional CLI arguments and a working directory)."
   (interactive "P")
   (ai-code--activate-effective-backend)
   (prog1
