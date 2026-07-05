@@ -346,6 +346,94 @@ The result is a cons of whether SYMBOL is bound and its default value."
       (when (file-directory-p root)
         (delete-directory root t)))))
 
+(ert-deftest test-ai-code-backends-infra-vterm-normalize-dim-sgr-uses-ansi-gray ()
+  "SGR dim text without a foreground should use standard ANSI gray."
+  (with-temp-buffer
+    (should (equal (ai-code-backends-infra--vterm-normalize-dim-sgr
+                    "\e[2mtext\e[22m")
+                   "\e[2;90mtext\e[22;39m"))
+    (should (equal (ai-code-backends-infra--vterm-normalize-dim-sgr
+                    "\e[2;4mtext\e[22m")
+                   "\e[2;4;90mtext\e[22;39m"))
+    (should (equal (ai-code-backends-infra--vterm-normalize-dim-sgr
+                    "\e[2;31mtext\e[22m")
+                   "\e[2;31mtext\e[22m"))
+    (should (equal (ai-code-backends-infra--vterm-normalize-dim-sgr
+                    "\e[38;2;1;2;3mtext\e[39m")
+                   "\e[38;2;1;2;3mtext\e[39m"))
+    (should (equal (ai-code-backends-infra--vterm-normalize-dim-sgr
+                    "\e[48;2;1;2;3mtext\e[49m")
+                   "\e[48;2;1;2;3mtext\e[49m"))))
+
+(ert-deftest test-ai-code-backends-infra-vterm-normalize-dim-sgr-preserves-explicit-foreground ()
+  "SGR dim should not override an explicit foreground from an earlier sequence."
+  (with-temp-buffer
+    (should (equal (ai-code-backends-infra--vterm-normalize-dim-sgr
+                    "\e[31mred\e[2mdim\e[22mred")
+                   "\e[31mred\e[2mdim\e[22mred"))
+    (should-not ai-code-backends-infra--vterm-dim-foreground-active)))
+
+(ert-deftest test-ai-code-backends-infra-vterm-normalize-dim-sgr-empty-param-resets ()
+  "Empty SGR parameters should be treated as reset parameters."
+  (with-temp-buffer
+    (should (equal (ai-code-backends-infra--vterm-normalize-dim-sgr
+                    "\e[2;mtext")
+                   "\e[2;mtext"))
+    (should-not ai-code-backends-infra--vterm-dim-foreground-active)))
+
+(ert-deftest test-ai-code-backends-infra-vterm-normalize-dim-sgr-cross-chunk ()
+  "Injected gray foreground should be reset when SGR dim ends later."
+  (with-temp-buffer
+    (should (equal (ai-code-backends-infra--vterm-normalize-dim-sgr
+                    "\e[2mtext")
+                   "\e[2;90mtext"))
+    (should ai-code-backends-infra--vterm-dim-foreground-active)
+    (should (equal (ai-code-backends-infra--vterm-normalize-dim-sgr
+                    " more")
+                   " more"))
+    (should (equal (ai-code-backends-infra--vterm-normalize-dim-sgr
+                    "\e[22m")
+                   "\e[22;39m"))
+    (should-not ai-code-backends-infra--vterm-dim-foreground-active)))
+
+(ert-deftest test-ai-code-backends-infra-vterm-notification-tracker-normalizes-dim-sgr ()
+  "Vterm session output should normalize dim SGR before rendering."
+  (let ((buffer (generate-new-buffer "*codex[dim-sgr]*"))
+        (process 'fake-process)
+        rendered)
+    (unwind-protect
+        (cl-letf (((symbol-function 'process-buffer)
+                   (lambda (_process) buffer))
+                  ((symbol-function 'ai-code-backends-infra--note-meaningful-output)
+                   (lambda (&rest _args) nil))
+                  ((symbol-function 'ai-code-session-link--schedule-linkify-recent-output)
+                   (lambda (&rest _args) nil)))
+          (ai-code-backends-infra--vterm-notification-tracker
+           (lambda (_process input)
+             (setq rendered input))
+           process
+           "\e[2mplaceholder\e[22m")
+          (should (equal rendered "\e[2;90mplaceholder\e[22;39m")))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest test-ai-code-backends-infra-vterm-notification-tracker-ignores-non-session ()
+  "Non-AI vterm output should pass through unchanged."
+  (let ((buffer (generate-new-buffer "*vterm*"))
+        (process 'fake-process)
+        rendered)
+    (unwind-protect
+        (cl-letf (((symbol-function 'process-buffer)
+                   (lambda (_process) buffer)))
+          (ai-code-backends-infra--vterm-notification-tracker
+           (lambda (_process input)
+             (setq rendered input))
+           process
+           "\e[2mplaceholder\e[22m")
+          (should (equal rendered "\e[2mplaceholder\e[22m")))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
 (ert-deftest test-ai-code-backends-infra-response-seen-visible ()
   "Mark responses as seen without notifying when visible."
   (let ((notification-count 0))
