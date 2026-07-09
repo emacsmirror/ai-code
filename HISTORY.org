@@ -2,6 +2,7 @@
 * Release history
 
 ** Main branch change
+- Fix Ghostel IME preedit flicker, by fxa
 - Fix wrapped session link hover coverage in Ghostel, by fxa
 - Chore: Require deterministic randomness in AI-generated test prompts
 
