@@ -1,6 +1,6 @@
 ;;; ai-code-session-link.el --- Shared session link helpers -*- lexical-binding: t; -*-
 
-;; Author: Kang Tu <tninja@gmail.com>
+;; Author: Kang Tu, realazy (cxa)
 ;; SPDX-License-Identifier: Apache-2.0
 
 ;;; Commentary:
