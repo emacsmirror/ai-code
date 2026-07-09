@@ -24,6 +24,7 @@
 (defvar ghostel--fake-cursor-overlay)
 (defvar ghostel--plain-link-detection-begin)
 (defvar ghostel--plain-link-detection-end)
+(defvar ghostel-link-map)
 (defvar x-preedit-overlay)
 
 (ert-deftest test-ai-code-backends-infra-ghostel-create-session-restores-ai-state ()
@@ -171,17 +172,255 @@
     (setq-local ai-code-backends-infra--session-terminal-backend 'ghostel)
     (setq-local ghostel-inhibit-redraw-functions nil)
     (setq-local ai-code-session-link-inhibit-functions nil)
+    (setq-local pre-command-hook nil)
+    (setq-local post-command-hook nil)
     (cl-letf (((symbol-function 'ai-code-backends-infra--configure-session-input-shortcuts)
                (lambda () nil))
               ((symbol-function 'ai-code-backends-infra--install-navigation-cursor-sync)
                (lambda () nil)))
       (ai-code-backends-infra--configure-ghostel-buffer))
     (should
-     (memq #'ai-code-backends-infra-ghostel--native-preedit-active-p
+     (memq #'ai-code-backends-infra-ghostel--redraw-inhibited-p
            ghostel-inhibit-redraw-functions))
     (should
-     (memq #'ai-code-backends-infra-ghostel--native-preedit-active-p
-           ai-code-session-link-inhibit-functions))))
+     (memq #'ai-code-backends-infra-ghostel--redraw-inhibited-p
+           ai-code-session-link-inhibit-functions))
+    (should-not
+     (memq #'ai-code-backends-infra-ghostel--note-input-activity
+           pre-command-hook))
+    (should-not
+     (memq #'ai-code-backends-infra-ghostel--note-input-activity
+           post-command-hook))))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-configures-recent-input-redraw-inhibition ()
+  "Ghostel can optionally defer redraw briefly after input."
+  (let ((ai-code-backends-infra-ghostel-inhibit-redraw-after-input t))
+    (with-temp-buffer
+      (setq-local ai-code-backends-infra--session-terminal-backend 'ghostel)
+      (setq-local ghostel-inhibit-redraw-functions nil)
+      (setq-local ai-code-session-link-inhibit-functions nil)
+      (setq-local pre-command-hook nil)
+      (setq-local post-command-hook nil)
+      (cl-letf (((symbol-function 'ai-code-backends-infra--configure-session-input-shortcuts)
+                 (lambda () nil))
+                ((symbol-function 'ai-code-backends-infra--install-navigation-cursor-sync)
+                 (lambda () nil)))
+        (ai-code-backends-infra--configure-ghostel-buffer))
+      (should
+       (memq #'ai-code-backends-infra-ghostel--redraw-inhibited-p
+             ghostel-inhibit-redraw-functions))
+      (should
+       (memq #'ai-code-backends-infra-ghostel--redraw-inhibited-p
+             ai-code-session-link-inhibit-functions))
+      (should
+       (memq #'ai-code-backends-infra-ghostel--note-input-activity
+             pre-command-hook))
+      (should
+       (memq #'ai-code-backends-infra-ghostel--note-input-activity
+             post-command-hook)))))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-restores-preserved-link-spans ()
+  "Ghostel redraws should restore cached links without repeated property churn."
+  (let ((link-keymap (make-sparse-keymap))
+        (add-count 0))
+    (with-temp-buffer
+      (setq-local ai-code-backends-infra--session-terminal-backend 'ghostel)
+      (insert "Working (42s)\nOpen src/foo.el:1\n")
+      (let (link-start link-end)
+        (goto-char (point-min))
+        (search-forward "src/foo.el:1")
+        (setq link-start (match-beginning 0)
+              link-end (match-end 0))
+        (add-text-properties
+         link-start link-end
+         (list 'help-echo "fileref:/tmp/src/foo.el:1"
+               'mouse-face 'highlight
+               'keymap link-keymap
+               'face 'link))
+        (ai-code-backends-infra-ghostel--cache-preserved-link-spans
+         (point-min) (point-max))
+        (remove-text-properties
+         link-start link-end
+         '(help-echo nil mouse-face nil keymap nil face nil))
+        (goto-char (point-min))
+        (search-forward "42s")
+        (replace-match "43s")
+        (should-not (get-text-property link-start 'help-echo))
+        (cl-letf (((symbol-function 'add-text-properties)
+                   (let ((orig (symbol-function 'add-text-properties)))
+                     (lambda (start end props &optional object)
+                       (cl-incf add-count)
+                       (funcall orig start end props object)))))
+          (ai-code-backends-infra-ghostel--restore-preserved-link-spans
+           (point-min) (point-max))
+          (should (equal (get-text-property link-start 'help-echo)
+                         "fileref:/tmp/src/foo.el:1"))
+          (should (eq (get-text-property link-start 'keymap) link-keymap))
+          (should (= add-count 1))
+          (ai-code-backends-infra-ghostel--restore-preserved-link-spans
+           (point-min) (point-max))
+          (should (= add-count 1)))))))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-schedule-link-detection-restores-first ()
+  "Ghostel link detection should see cached links before rescanning."
+  (let ((link-keymap (make-sparse-keymap))
+        restored-before-scan)
+    (with-temp-buffer
+      (setq-local ai-code-backends-infra--session-terminal-backend 'ghostel)
+      (insert "Open src/foo.el:1\n")
+      (let (link-start link-end)
+        (goto-char (point-min))
+        (search-forward "src/foo.el:1")
+        (setq link-start (match-beginning 0)
+              link-end (match-end 0))
+        (add-text-properties
+         link-start link-end
+         (list 'help-echo "fileref:/tmp/src/foo.el:1"
+               'mouse-face 'highlight
+               'keymap link-keymap))
+        (ai-code-backends-infra-ghostel--cache-preserved-link-spans
+         (point-min) (point-max))
+        (remove-text-properties
+         link-start link-end
+         '(help-echo nil mouse-face nil keymap nil))
+        (ai-code-backends-infra-ghostel--around-schedule-link-detection
+         (lambda (_begin _end)
+           (setq restored-before-scan
+                 (get-text-property link-start 'help-echo)))
+         (point-min)
+         (point-max))
+        (should (equal restored-before-scan
+                       "fileref:/tmp/src/foo.el:1"))))))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-working-redraw-keeps-cached-links ()
+  "Working animation redraws should not refresh already detected links."
+  (let ((link-keymap (make-sparse-keymap))
+        linkify-called)
+    (with-temp-buffer
+      (setq-local ai-code-backends-infra--session-terminal-backend 'ghostel)
+      (insert "Working (42s)\nOpen src/foo.el:1\n")
+      (let (link-start link-end)
+        (goto-char (point-min))
+        (search-forward "src/foo.el:1")
+        (setq link-start (match-beginning 0)
+              link-end (match-end 0))
+        (add-text-properties
+         link-start link-end
+         (list 'ai-code-session-link "src/foo.el:1"
+               'ai-code-session-hover-link t
+               'help-echo "mouse-1: Visit file"
+               'mouse-face 'highlight
+               'keymap link-keymap
+               'follow-link t
+               'font-lock-face 'link
+               'face 'link))
+        (ai-code-backends-infra-ghostel--cache-preserved-link-spans
+         (point-min) (point-max))
+        (remove-text-properties
+         link-start link-end
+         '(ai-code-session-link nil
+           ai-code-session-hover-link nil
+           help-echo nil
+           mouse-face nil
+           keymap nil
+           follow-link nil
+           font-lock-face nil
+           face nil))
+        (goto-char (point-min))
+        (search-forward "42s")
+        (replace-match "43s")
+        (cl-letf (((symbol-function
+                    'ai-code-session-link--linkify-session-region)
+                   (lambda (&rest _args)
+                     (setq linkify-called t))))
+          (ai-code-backends-infra-ghostel--linkify-image-preview-region
+           (current-buffer)
+           (point-min)
+           (point-max)))
+        (should-not linkify-called)
+        (should (equal (get-text-property link-start 'ai-code-session-link)
+                       "src/foo.el:1"))
+        (should (equal (get-text-property link-start 'help-echo)
+                       "mouse-1: Visit file"))))))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-unlinked-candidate-still-linkifies ()
+  "Ghostel redraw linkification should still run for new unlinked paths."
+  (let (linkify-called)
+    (with-temp-buffer
+      (setq-local ai-code-backends-infra--session-terminal-backend 'ghostel)
+      (insert "Working (42s)\nOpen src/new.el:1\n")
+      (cl-letf (((symbol-function
+                  'ai-code-session-link--linkify-session-region)
+                 (lambda (&rest _args)
+                   (setq linkify-called t))))
+        (ai-code-backends-infra-ghostel--linkify-image-preview-region
+         (current-buffer)
+         (point-min)
+         (point-max)))
+      (should linkify-called))))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-records-recent-input-in-ai-session ()
+  "Recent input tracking should only mark AI Code Ghostel sessions."
+  (cl-letf (((symbol-function 'float-time)
+             (lambda (&optional _time) 10.0)))
+    (with-temp-buffer
+      (setq-local ai-code-backends-infra--session-terminal-backend 'ghostel)
+      (ai-code-backends-infra-ghostel--note-input-activity)
+      (should (= ai-code-backends-infra-ghostel--last-input-activity-time
+                 10.0)))
+    (with-temp-buffer
+      (ai-code-backends-infra-ghostel--note-input-activity)
+      (should-not ai-code-backends-infra-ghostel--last-input-activity-time))))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-detects-recent-input-window ()
+  "Recent Ghostel input should inhibit redraws for a short bounded window."
+  (let ((ai-code-backends-infra-ghostel-inhibit-redraw-after-input t)
+        (ai-code-backends-infra-ghostel-input-redraw-inhibit-delay 0.8))
+    (cl-letf (((symbol-function 'float-time)
+               (lambda (&optional _time) 10.0)))
+      (with-temp-buffer
+        (setq-local ai-code-backends-infra--session-terminal-backend 'ghostel)
+        (setq-local ai-code-backends-infra-ghostel--last-input-activity-time
+                    9.5)
+        (should
+         (ai-code-backends-infra-ghostel--recent-input-active-p
+          (current-buffer)))
+        (setq-local ai-code-backends-infra-ghostel--last-input-activity-time
+                    9.0)
+        (should-not
+         (ai-code-backends-infra-ghostel--recent-input-active-p
+          (current-buffer))))
+      (with-temp-buffer
+        (setq-local ai-code-backends-infra-ghostel--last-input-activity-time
+                    9.5)
+        (should-not
+         (ai-code-backends-infra-ghostel--recent-input-active-p
+          (current-buffer)))))))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-redraw-inhibited-p-combines-input-states ()
+  "Ghostel redraw inhibition should cover preedit and recent input."
+  (with-temp-buffer
+    (let (native recent)
+      (cl-letf (((symbol-function
+                  'ai-code-backends-infra-ghostel--native-preedit-active-p)
+                 (lambda (&optional _buffer) native))
+                ((symbol-function
+                  'ai-code-backends-infra-ghostel--recent-input-active-p)
+                 (lambda (&optional _buffer) recent)))
+        (setq native t
+              recent nil)
+        (should
+         (ai-code-backends-infra-ghostel--redraw-inhibited-p
+          (current-buffer)))
+        (setq native nil
+              recent t)
+        (should
+         (ai-code-backends-infra-ghostel--redraw-inhibited-p
+          (current-buffer)))
+        (setq recent nil)
+        (should-not
+         (ai-code-backends-infra-ghostel--redraw-inhibited-p
+          (current-buffer)))))))
 
 (ert-deftest test-ai-code-backends-infra-ghostel-configures-visible-image-hook ()
   "Ghostel AI session configuration should install visible image recovery."
@@ -340,6 +579,39 @@
                         ai-code-session-link--linkify-inhibited-retry-delay))))
               (should-not linkified))
           (delete-overlay overlay))))))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-visible-linkify-retries-during-recent-input ()
+  "Visible linkification should retry while recent input protects redraws."
+  (let (rescheduled linkified)
+    (with-temp-buffer
+      (set-window-buffer (selected-window) (current-buffer))
+      (setq-local ai-code-backends-infra--session-terminal-backend 'ghostel)
+      (setq-local ai-code-backends-infra-ghostel--last-input-activity-time
+                  9.5)
+      (insert "src/File.el:1\n")
+      (goto-char (point-max))
+      (let ((ai-code-backends-infra-ghostel-inhibit-redraw-after-input t)
+            (ai-code-backends-infra-ghostel-input-redraw-inhibit-delay 0.8))
+        (cl-letf (((symbol-function 'float-time)
+                   (lambda (&optional _time) 10.0))
+                  ((symbol-function
+                    'ai-code-backends-infra-ghostel-schedule-visible-image-linkify)
+                   (lambda (window delays)
+                     (setq rescheduled (list window delays))))
+                  ((symbol-function
+                    'ai-code-session-link--linkify-session-region)
+                   (lambda (&rest _args)
+                     (setq linkified t))))
+          (ai-code-backends-infra-ghostel--linkify-visible-image-previews
+           (current-buffer)
+           (selected-window))
+          (should
+           (equal rescheduled
+                  (list
+                   (selected-window)
+                   (list
+                    ai-code-session-link--linkify-inhibited-retry-delay))))
+          (should-not linkified))))))
 
 (ert-deftest test-ai-code-backends-infra-ghostel-visible-linkify-wraps-url ()
   "Visible Ghostel linkification should relinkify wrapped URLs."
@@ -595,6 +867,230 @@
         (if original-bound
             (setq ghostel-kitty-graphics-mediums original-value)
           (makunbound 'ghostel-kitty-graphics-mediums))))))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-normalize-dim-sgr-uses-ansi-gray ()
+  "SGR dim text without a foreground should use standard ANSI gray."
+  (with-temp-buffer
+    (should (equal (ai-code-backends-infra-ghostel--normalize-dim-sgr
+                    "\e[2mWorking\e[22m")
+                   "\e[2;90mWorking\e[22;39m"))
+    (should (equal (ai-code-backends-infra-ghostel--normalize-dim-sgr
+                    "\e[2;4mWorking\e[22m")
+                   "\e[2;4;90mWorking\e[22;39m"))
+    (should (equal (ai-code-backends-infra-ghostel--normalize-dim-sgr
+                    "\e[2;31mWorking\e[22m")
+                   "\e[2;31mWorking\e[22m"))
+    (should (equal (ai-code-backends-infra-ghostel--normalize-dim-sgr
+                    "\e[38;2;1;2;3mWorking\e[39m")
+                   "\e[38;2;1;2;3mWorking\e[39m"))
+    (should (equal (ai-code-backends-infra-ghostel--normalize-dim-sgr
+                    "\e[48;2;1;2;3mWorking\e[49m")
+                   "\e[48;2;1;2;3mWorking\e[49m"))))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-normalize-dim-sgr-cross-chunk ()
+  "Injected gray foreground should be reset when SGR dim ends later."
+  (with-temp-buffer
+    (should (equal (ai-code-backends-infra-ghostel--normalize-dim-sgr
+                    "\e[2mWorking")
+                   "\e[2;90mWorking"))
+    (should ai-code-backends-infra-ghostel--dim-foreground-active)
+    (should (equal (ai-code-backends-infra-ghostel--normalize-dim-sgr
+                    " (43s)")
+                   " (43s)"))
+    (should (equal (ai-code-backends-infra-ghostel--normalize-dim-sgr
+                    "\e[22m")
+                   "\e[22;39m"))
+    (should-not ai-code-backends-infra-ghostel--dim-foreground-active)))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-render-output-normalizes-dim-sgr ()
+  "Ghostel session output should normalize dim SGR before rendering."
+  (let (rendered linkified noted)
+    (with-temp-buffer
+      (setq-local ai-code-backends-infra--session-terminal-backend 'ghostel)
+      (cl-letf (((symbol-function 'ai-code-backends-infra--output-meaningful-p)
+                 (lambda (_output) t))
+                ((symbol-function 'ai-code-backends-infra--note-meaningful-output)
+                 (lambda ()
+                   (setq noted t)))
+                ((symbol-function 'ai-code-session-link--schedule-linkify-recent-output)
+                 (lambda (_buffer output &optional _delay)
+                   (setq linkified output))))
+        (ai-code-backends-infra-ghostel--render-output
+         (current-buffer)
+         (lambda (_process output)
+           (setq rendered output))
+         'mock-process
+         "\e[2mDone src/foo.el:1\e[22m")
+        (should (equal rendered "\e[2;90mDone src/foo.el:1\e[22;39m"))
+        (should (equal linkified "\e[2;90mDone src/foo.el:1\e[22;39m"))
+        (should noted)))))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-render-output-skips-linkify-for-working ()
+  "Working redraw output should not churn session link underlines."
+  (let (rendered linkified)
+    (with-temp-buffer
+      (setq-local ai-code-backends-infra--session-terminal-backend 'ghostel)
+      (cl-letf (((symbol-function 'ai-code-backends-infra--output-meaningful-p)
+                 (lambda (_output) nil))
+                ((symbol-function 'ai-code-session-link--schedule-linkify-recent-output)
+                 (lambda (&rest _args)
+                   (setq linkified t))))
+        (ai-code-backends-infra-ghostel--render-output
+         (current-buffer)
+         (lambda (_process output)
+           (setq rendered output))
+         'mock-process
+         "\e[2K\r\e[2mWorking (43s) - esc to interrupt\e[22m")
+        (should
+         (equal rendered
+                "\e[2K\r\e[2;90mWorking (43s) - esc to interrupt\e[22;39m"))
+        (should-not linkified)))))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-queues-redraw-output ()
+  "Ghostel redraw-like output should be batched before rendering."
+  (let (rendered scheduled cancelled noted linkified)
+    (with-temp-buffer
+      (setq-local ai-code-backends-infra--session-terminal-backend 'ghostel)
+      (cl-letf (((symbol-function 'run-at-time)
+                 (lambda (_delay _repeat function &rest args)
+                   (setq scheduled (cons function args))
+                   'mock-timer))
+                ((symbol-function 'cancel-timer)
+                 (lambda (timer)
+                   (push timer cancelled)))
+                ((symbol-function 'ai-code-backends-infra--output-meaningful-p)
+                 (lambda (_output) t))
+                ((symbol-function 'ai-code-backends-infra--note-meaningful-output)
+                 (lambda ()
+                   (setq noted t)))
+                ((symbol-function 'ai-code-session-link--schedule-linkify-recent-output)
+                 (lambda (_buffer output &optional _delay)
+                   (push output linkified))))
+        (ai-code-backends-infra-ghostel--handle-process-output
+         (current-buffer)
+         (lambda (_process output)
+           (push output rendered))
+         'mock-process
+         "\e[2K\rWorking (42s")
+        (should-not rendered)
+        (should (equal ai-code-backends-infra-ghostel--render-queue
+                       "\e[2K\rWorking (42s"))
+        (should (eq ai-code-backends-infra-ghostel--render-timer 'mock-timer))
+        (ai-code-backends-infra-ghostel--handle-process-output
+         (current-buffer)
+         (lambda (_process output)
+           (push output rendered))
+         'mock-process
+         " - esc to interrupt)")
+        (should (equal cancelled '(mock-timer)))
+        (should (equal ai-code-backends-infra-ghostel--render-queue
+                       "\e[2K\rWorking (42s - esc to interrupt)"))
+        (apply (car scheduled) (cdr scheduled))
+        (should (equal rendered
+                       '("\e[2K\rWorking (42s - esc to interrupt)")))
+        (should noted)
+        (should-not linkified)
+        (should-not ai-code-backends-infra-ghostel--render-queue)
+        (should-not ai-code-backends-infra-ghostel--render-timer)))))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-renders-plain-output-immediately ()
+  "Plain Ghostel output should not wait for anti-flicker batching."
+  (let (rendered timer-scheduled)
+    (with-temp-buffer
+      (setq-local ai-code-backends-infra--session-terminal-backend 'ghostel)
+      (cl-letf (((symbol-function 'run-at-time)
+                 (lambda (&rest _args)
+                   (setq timer-scheduled t)
+                   'mock-timer))
+                ((symbol-function 'ai-code-backends-infra--output-meaningful-p)
+                 (lambda (_output) nil))
+                ((symbol-function 'ai-code-session-link--schedule-linkify-recent-output)
+                 (lambda (&rest _args) nil)))
+        (ai-code-backends-infra-ghostel--handle-process-output
+         (current-buffer)
+         (lambda (_process output)
+           (push output rendered))
+         'mock-process
+         "plain log line\n")
+        (should (equal rendered '("plain log line\n")))
+        (should-not timer-scheduled)
+        (should-not ai-code-backends-infra-ghostel--render-queue)
+        (should-not ai-code-backends-infra-ghostel--render-timer)))))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-handle-output-keeps-working-chunks ()
+  "Process output handling should keep Working chunks for Ghostel parsing."
+  (let (rendered scheduled cancelled linkified)
+    (with-temp-buffer
+      (setq-local ai-code-backends-infra--session-terminal-backend 'ghostel)
+      (cl-letf (((symbol-function 'run-at-time)
+                 (lambda (_delay _repeat function &rest args)
+                   (setq scheduled (cons function args))
+                   'mock-timer))
+                ((symbol-function 'cancel-timer)
+                 (lambda (timer)
+                   (push timer cancelled)))
+                ((symbol-function 'ai-code-backends-infra--output-meaningful-p)
+                 (lambda (_output) nil))
+                ((symbol-function 'ai-code-session-link--schedule-linkify-recent-output)
+                 (lambda (&rest _args)
+                   (setq linkified t))))
+        (ai-code-backends-infra-ghostel--handle-process-output
+         (current-buffer)
+         (lambda (_process output)
+           (push output rendered))
+         'mock-process
+         "\e[2K\r\e[2mWorking (42s)\e[22m")
+        (ai-code-backends-infra-ghostel--handle-process-output
+         (current-buffer)
+         (lambda (_process output)
+           (push output rendered))
+         'mock-process
+         "\e[2K\r\e[2;4mWorking\e[22;24m (42s)")
+        (should (equal cancelled '(mock-timer)))
+        (should (equal ai-code-backends-infra-ghostel--render-queue
+                       (concat
+                        "\e[2K\r\e[2mWorking (42s)\e[22m"
+                        "\e[2K\r\e[2;4mWorking\e[22;24m (42s)")))
+        (apply (car scheduled) (cdr scheduled))
+        (should (= (length rendered) 1))
+        (should
+         (equal
+          (ai-code-session-link--recent-output-plain-text (car rendered))
+          "Working (42s)Working (42s)"))
+        (should-not linkified)))))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-wrap-process-filter-is-idempotent ()
+  "Ghostel process output wrapping should not stack duplicate wrappers."
+  (let ((buffer (generate-new-buffer " *ai-code-ghostel-filter-test*"))
+        proc
+        calls)
+    (unwind-protect
+        (progn
+          (setq proc
+                (make-pipe-process
+                 :name "ai-code-ghostel-filter-test"
+                 :buffer buffer
+                 :noquery t
+                 :filter (lambda (_process _output)
+                           (setq calls (1+ (or calls 0))))))
+          (ai-code-backends-infra-ghostel--wrap-process-filter buffer proc)
+          (let ((wrapped (process-filter proc)))
+            (ai-code-backends-infra-ghostel--wrap-process-filter buffer proc)
+            (should (eq (process-filter proc) wrapped))
+            (with-current-buffer buffer
+              (setq-local ai-code-backends-infra--session-terminal-backend
+                          'ghostel))
+            (cl-letf (((symbol-function 'ai-code-backends-infra--output-meaningful-p)
+                       (lambda (_output) nil))
+                      ((symbol-function
+                        'ai-code-session-link--schedule-linkify-recent-output)
+                       (lambda (&rest _args) nil)))
+              (funcall wrapped proc "plain output"))
+            (should (= calls 1))))
+      (when (processp proc)
+        (delete-process proc))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
 
 (ert-deftest test-ai-code-backends-infra-ghostel-command-lifecycle-updates-session-metadata ()
   "OSC 133 command hooks should write structured session metadata."
