@@ -15,7 +15,6 @@
 - Fix: Remove citation to ghostel private function (--)
 - Feat: Track Ghostel lifecycle and progress metadata
 - Chore: Prompt for working directory on prefixed AI CLI start/resume, reported by isoboroff
-isoboroff
 - Fix: [codex] Normalize vterm dim SGR foreground, by cxa
 - Feat: Add C4 PlantUML architecture document derivation
 - Chore: Support optional editor context in GitHub issue investigation
