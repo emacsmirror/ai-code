@@ -2,6 +2,8 @@
 * Release history
 
 ** Main branch change
+- Fix Ghostel input jitter caused by inline image anchoring, by fxa
+- Support selected region as context in TDD write-test stage
 
 ** 1.89
 - Fix: Avoid autoload-time evaluation of harness test suffix, reported by fxa
