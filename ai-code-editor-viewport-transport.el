@@ -17,8 +17,15 @@
 
 (declare-function ai-code-editor-viewport--open-request
                   "ai-code-editor-viewport" (source-buffer payload))
+(declare-function ai-code-editor-viewport--schedule-submit
+                  "ai-code-editor-viewport" (source-buffer))
 
 (defvar ai-code-editor-viewport-enabled)
+
+(defcustom ai-code-editor-viewport-auto-submit t
+  "Whether general editor requests submit restored terminal input."
+  :type 'boolean
+  :group 'ai-code)
 
 (defcustom ai-code-editor-viewport-max-request-size (* 1024 1024)
   "Maximum encoded size in bytes for one terminal editor request."
@@ -27,11 +34,14 @@
 
 (defconst ai-code-editor-viewport--protocol-prefix
   "\e]6973;ai-code-editor;"
-  "Base prefix for editor requests emitted through a managed terminal PTY.")
+  "Base prefix for viewport protocol frames on a managed terminal PTY.")
 
 (defconst ai-code-editor-viewport--protocol-suffix
   "\a"
-  "Suffix for editor requests emitted through a managed terminal PTY.")
+  "Suffix for viewport protocol frames on a managed terminal PTY.")
+
+(defconst ai-code-editor-viewport--submit-ready-prefix "submit-ready:"
+  "Prefix for completion payloads emitted after a helper is reaped.")
 
 (defconst ai-code-editor-viewport--frame-prefix-environment-variable
   "AI_CODE_EDITOR_VIEWPORT_FRAME_PREFIX"
@@ -46,6 +56,12 @@
 
 (defvar-local ai-code-editor-viewport--protocol-pending ""
   "Partial terminal editor protocol frame awaiting more process output.")
+
+(defvar-local ai-code-editor-viewport--pending-submit-token nil
+  "One-time token expected from this session's completed editor helper.")
+
+(defvar ai-code-editor-viewport--submit-token-counter 0
+  "Sequence mixed into one-time editor submit tokens.")
 
 (defvar ai-code-editor-viewport--helper-file nil
   "Path to the generated CLI editor helper.")
@@ -73,8 +89,8 @@
 
 (defun ai-code-editor-viewport--parse-output (pending output)
   "Parse terminal OUTPUT after PENDING protocol data.
-Return a plist with visible `:output', incomplete `:pending', and decoded
-  base64 `:payloads'."
+Return a plist with visible `:output', incomplete `:pending', and raw frame
+`:payloads'."
   (let* ((data (concat pending output))
          (prefix (ai-code-editor-viewport--frame-prefix))
          (suffix ai-code-editor-viewport--protocol-suffix)
@@ -109,19 +125,63 @@ Return a plist with visible `:output', incomplete `:pending', and decoded
           :pending pending
           :payloads (nreverse payloads))))
 
-(defun ai-code-editor-viewport--schedule-request (source-buffer payload)
-  "Schedule editor PAYLOAD for SOURCE-BUFFER when it is within limits."
+(defun ai-code-editor-viewport--prepare-submit-token (source-buffer)
+  "Return and store a fresh submit token for SOURCE-BUFFER."
+  (unless (buffer-live-p source-buffer)
+    (error "Dead AI Code editor source buffer"))
+  (let ((token
+         (secure-hash
+          'sha256
+          (format "%s:%s:%s:%s"
+                  ai-code-editor-viewport--protocol-token
+                  (float-time)
+                  (cl-incf ai-code-editor-viewport--submit-token-counter)
+                  (random)))))
+    (with-current-buffer source-buffer
+      (setq ai-code-editor-viewport--pending-submit-token token))
+    token))
+
+(defun ai-code-editor-viewport--discard-submit-token
+    (source-buffer &optional token)
+  "Discard SOURCE-BUFFER's pending token when it matches TOKEN.
+When TOKEN is nil, discard any pending token."
+  (when (buffer-live-p source-buffer)
+    (with-current-buffer source-buffer
+      (when (or (null token)
+                (equal token ai-code-editor-viewport--pending-submit-token))
+        (setq ai-code-editor-viewport--pending-submit-token nil)))))
+
+(defun ai-code-editor-viewport--consume-submit-ready
+    (source-buffer payload)
+  "Consume SOURCE-BUFFER's one-time token from completion PAYLOAD."
+  (let ((token
+         (substring payload
+                    (length ai-code-editor-viewport--submit-ready-prefix))))
+    (when (buffer-live-p source-buffer)
+      (with-current-buffer source-buffer
+        (when (and (not (string-empty-p token))
+                   (equal token
+                          ai-code-editor-viewport--pending-submit-token))
+          (setq ai-code-editor-viewport--pending-submit-token nil)
+          (ai-code-editor-viewport--schedule-submit source-buffer)
+          t)))))
+
+(defun ai-code-editor-viewport--dispatch-payload (source-buffer payload)
+  "Dispatch protocol PAYLOAD for SOURCE-BUFFER when it is within limits."
   (if (> (string-bytes payload) ai-code-editor-viewport-max-request-size)
       (progn
         (message "Discarded oversized AI Code editor request")
         nil)
-    (run-at-time 0 nil
-                 #'ai-code-editor-viewport--open-request
-                 source-buffer payload)
-    t))
+    (if (string-prefix-p ai-code-editor-viewport--submit-ready-prefix payload)
+        (ai-code-editor-viewport--consume-submit-ready source-buffer payload)
+      (ai-code-editor-viewport--discard-submit-token source-buffer)
+      (run-at-time 0 nil
+                   #'ai-code-editor-viewport--open-request
+                   source-buffer payload)
+      t)))
 
 (defun ai-code-editor-viewport-filter-output (process output)
-  "Remove editor requests from PROCESS OUTPUT and schedule their viewports."
+  "Remove viewport frames from PROCESS OUTPUT and dispatch their payloads."
   (let ((buffer (ignore-errors (process-buffer process))))
     (if (not (buffer-live-p buffer))
         output
@@ -137,12 +197,12 @@ Return a plist with visible `:output', incomplete `:pending', and decoded
                   (message "Discarded oversized AI Code editor request"))
               (setq ai-code-editor-viewport--protocol-pending pending)))
           (dolist (payload (plist-get parsed :payloads))
-            (ai-code-editor-viewport--schedule-request buffer payload))
+            (ai-code-editor-viewport--dispatch-payload buffer payload))
           (plist-get parsed :output))))))
 
 (defun ai-code-editor-viewport-handle-request
     (source-buffer token payload)
-  "Schedule SOURCE-BUFFER editor PAYLOAD when TOKEN authenticates it."
+  "Dispatch SOURCE-BUFFER protocol PAYLOAD when TOKEN authenticates it."
   (cond
    ((or (not (stringp token))
         (not (string= token ai-code-editor-viewport--protocol-token))
@@ -150,7 +210,7 @@ Return a plist with visible `:output', incomplete `:pending', and decoded
         (not (buffer-live-p source-buffer)))
     nil)
    (t
-    (ai-code-editor-viewport--schedule-request
+    (ai-code-editor-viewport--dispatch-payload
      source-buffer payload))))
 
 (defun ai-code-editor-viewport--helper-content ()
@@ -195,8 +255,29 @@ Return a plist with visible `:output', incomplete `:pending', and decoded
      "  [ \"$attempts\" -lt \"$timeout\" ] || exit 1\n"
      "  sleep 1\n"
      "done\n"
-     "IFS= read -r result < \"$status_file\" || exit 1\n"
-     "[ \"$result\" = \"0\" ]\n")))
+     "IFS=' ' read -r result submit_result submit_token"
+     " < \"$status_file\" || exit 1\n"
+     "[ \"$result\" = \"0\" ] || exit 1\n"
+     "if [ \"$submit_result\" = \"1\" ]; then\n"
+     "  case \"$submit_token\" in\n"
+     "    ''|*[!0-9a-f]*) exit 1 ;;\n"
+     "  esac\n"
+     "  helper_pid=$$\n"
+     "  (\n"
+     "    trap - 0 2 15\n"
+     "    trap '' 1\n"
+     "    notify_attempts=0\n"
+     "    while kill -0 \"$helper_pid\" 2>/dev/null; do\n"
+     "      notify_attempts=$((notify_attempts + 1))\n"
+     "      [ \"$notify_attempts\" -lt 10 ] || exit 1\n"
+     "      sleep 1\n"
+     "    done\n"
+     "    printf '%s%s\\007' \"$frame_prefix\" \""
+     ai-code-editor-viewport--submit-ready-prefix
+     "$submit_token\" > /dev/tty\n"
+     "  ) &\n"
+     "fi\n"
+     "exit 0\n")))
 
 (defun ai-code-editor-viewport--cleanup-helper ()
   "Delete the generated CLI editor helper, if any."
@@ -241,18 +322,23 @@ Return a plist with visible `:output', incomplete `:pending', and decoded
 (defun ai-code-editor-viewport-environment (environment &optional frame-prefix)
   "Return ENVIRONMENT configured to edit through a terminal viewport.
 FRAME-PREFIX, when non-nil, selects an adapter-specific terminal frame.
-General editor requests submit restored input; Git editor requests only save."
+General editor requests submit restored input when
+`ai-code-editor-viewport-auto-submit' is non-nil.  Git editor requests only
+save."
   (if (or (not ai-code-editor-viewport-enabled)
           (not (ai-code-editor-viewport--supported-p)))
       environment
     (let* ((helper (ai-code-editor-viewport--ensure-helper))
            (helper-command (shell-quote-argument helper))
            (submit-command (concat helper-command " --ai-code-submit"))
+           (editor-command (if ai-code-editor-viewport-auto-submit
+                               submit-command
+                             helper-command))
            (prefix (or frame-prefix
                        (ai-code-editor-viewport--frame-prefix))))
       (append
-       (list (concat "EDITOR=" submit-command)
-             (concat "VISUAL=" submit-command)
+       (list (concat "EDITOR=" editor-command)
+             (concat "VISUAL=" editor-command)
              (concat "GIT_EDITOR=" helper-command)
              (concat "GIT_SEQUENCE_EDITOR=" helper-command)
              (concat

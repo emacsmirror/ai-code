@@ -42,6 +42,23 @@
           "AI_CODE_EDITOR_VIEWPORT_FRAME_PREFIX=\e]6973;ai-code-editor;test-token;"
           "TERM_PROGRAM=emacs"))))))
 
+(ert-deftest test-ai-code-editor-viewport-transport--environment-can-disable-auto-submit ()
+  "General editor requests should save only when auto-submit is disabled."
+  (let ((ai-code-editor-viewport-enabled t)
+        (ai-code-editor-viewport-auto-submit nil)
+        (ai-code-editor-viewport--protocol-token "test-token"))
+    (cl-letf (((symbol-function 'ai-code-editor-viewport--ensure-helper)
+               (lambda () "/tmp/ai-code-editor-helper"))
+              ((symbol-function 'ai-code-editor-viewport--supported-p)
+               (lambda () t)))
+      (should
+       (equal
+        (seq-take (ai-code-editor-viewport-environment nil) 4)
+        '("EDITOR=/tmp/ai-code-editor-helper"
+          "VISUAL=/tmp/ai-code-editor-helper"
+          "GIT_EDITOR=/tmp/ai-code-editor-helper"
+          "GIT_SEQUENCE_EDITOR=/tmp/ai-code-editor-helper"))))))
+
 (ert-deftest test-ai-code-editor-viewport-transport--environment-preserves-unsupported-host ()
   "Unsupported hosts should retain the CLI's existing editor environment."
   (let ((environment '("EDITOR=vim" "TERM_PROGRAM=emacs")))
@@ -64,6 +81,15 @@
      (string-match-p
       (regexp-quote "printf '%s\\0' \"$submit\"")
       content))
+    (should
+     (string-match-p
+      (regexp-quote
+       "read -r result submit_result submit_token < \"$status_file\"")
+      content))
+    (should
+     (string-match-p
+      (regexp-quote "submit-ready:$submit_token")
+      content))
     (should (string-match-p (regexp-quote "parent_pid=$PPID") content))
     (should
      (string-match-p
@@ -78,7 +104,14 @@
       (regexp-quote "[ \"$attempts\" -lt \"$timeout\" ] || exit 1")
       content))
     (should (string-match-p (regexp-quote "sleep 1") content))
-    (should-not (string-match-p (regexp-quote "sleep 0.05") content))
+    (should
+     (string-match-p
+      (regexp-quote "[ \"$notify_attempts\" -lt 10 ] || exit 1")
+      content))
+    (should-not
+     (string-match-p
+      "sleep [[:digit:]][[:digit:]]*\\.[[:digit:]][[:digit:]]*"
+      content))
     (should
      (string-match-p
       (regexp-quote
@@ -96,17 +129,22 @@
   (with-temp-buffer
     (let ((source-buffer (current-buffer))
           (ai-code-editor-viewport--protocol-token "test-token")
+          (ai-code-editor-viewport--pending-submit-token "old-submit-token")
           scheduled)
       (cl-letf (((symbol-function 'run-at-time)
                  (lambda (_time _repeat function &rest arguments)
                    (push (cons function arguments) scheduled))))
         (should-not
-         (ai-code-editor-viewport-handle-request
+        (ai-code-editor-viewport-handle-request
           source-buffer "wrong-token" "PAYLOAD"))
         (should-not scheduled)
         (should
+         (equal ai-code-editor-viewport--pending-submit-token
+                "old-submit-token"))
+        (should
          (ai-code-editor-viewport-handle-request
           source-buffer "test-token" "PAYLOAD"))
+        (should-not ai-code-editor-viewport--pending-submit-token)
         (should
          (equal scheduled
                 `((ai-code-editor-viewport--open-request
@@ -126,6 +164,32 @@
          (ai-code-editor-viewport-handle-request
           source-buffer "test-token" "LONG"))
         (should-not scheduled)))))
+
+(ert-deftest test-ai-code-editor-viewport-transport--submit-ready-token-is-one-time ()
+  "Only the current one-time completion token should schedule submission."
+  (with-temp-buffer
+    (let ((source-buffer (current-buffer))
+          (ai-code-editor-viewport--pending-submit-token "current-token")
+          scheduled)
+      (cl-letf (((symbol-function 'ai-code-editor-viewport--schedule-submit)
+                 (lambda (buffer)
+                   (push buffer scheduled))))
+        (should-not
+         (ai-code-editor-viewport--dispatch-payload
+          source-buffer "submit-ready:stale-token"))
+        (should
+         (equal ai-code-editor-viewport--pending-submit-token
+                "current-token"))
+        (should-not scheduled)
+        (should
+         (ai-code-editor-viewport--dispatch-payload
+          source-buffer "submit-ready:current-token"))
+        (should-not ai-code-editor-viewport--pending-submit-token)
+        (should (equal scheduled (list source-buffer)))
+        (should-not
+         (ai-code-editor-viewport--dispatch-payload
+          source-buffer "submit-ready:current-token"))
+        (should (equal scheduled (list source-buffer)))))))
 
 
 (ert-deftest test-ai-code-editor-viewport-transport--ensure-helper-creates-tty-request-script ()
@@ -223,6 +287,94 @@
                     "draft prompt.md")))
             (should-not
              (string-match-p "6973;ai-code-editor" visible-output)))
+        (when (process-live-p process)
+          (delete-process process))
+        (ai-code-editor-viewport--cleanup-helper)
+        (delete-directory directory t)))))
+
+(ert-deftest test-ai-code-editor-viewport-transport--auto-submit-waits-for-helper-release ()
+  "Auto-submit should run only after the external editor helper exits."
+  (ai-code-editor-viewport-transport-test--with-buffer
+      (source-buffer " *ai-code-editor-submit-pty*")
+    (let* ((directory (make-temp-file "ai-code-editor-submit-pty-" t))
+           (temporary-file-directory directory)
+           (file (expand-file-name "draft.md" directory))
+           (pid-file (expand-file-name "helper.pid" directory))
+           (ai-code-editor-viewport--helper-file nil)
+           (original-helper-content
+            (symbol-function 'ai-code-editor-viewport--helper-content))
+           environment
+           editor-command
+           (deadline (+ (float-time) 5))
+           process
+           helper-pid
+           submitted
+           helper-live-at-submit)
+      (unwind-protect
+          (progn
+            (with-temp-file file
+              (insert "draft"))
+            (cl-letf (((symbol-function
+                        'ai-code-editor-viewport--helper-content)
+                       (lambda ()
+                         (string-replace
+                          "fi\nexit 0\n"
+                          "fi\nsleep 1\nexit 0\n"
+                          (funcall original-helper-content)))))
+              (setq environment (ai-code-editor-viewport-environment nil)))
+            (setq editor-command
+                  (split-string-shell-command
+                   (string-remove-prefix "EDITOR=" (car environment))))
+            (with-current-buffer source-buffer
+              (setq-local default-directory directory)
+              (setq-local
+               ai-code-editor-viewport--submit-function
+               (lambda ()
+                 (setq submitted t
+                       helper-live-at-submit
+                       (process-attributes helper-pid)))))
+            (let ((process-environment
+                   (append environment process-environment)))
+              (cl-letf (((symbol-function 'ai-code-editor-viewport--display)
+                         (lambda (&rest _arguments) nil))
+                        ((symbol-function 'recursive-edit)
+                         (lambda ()
+                           (ai-code-editor-viewport-finish)))
+                        ((symbol-function 'exit-recursive-edit)
+                         (lambda () nil)))
+                (setq process
+                      (make-process
+                       :name "ai-code-editor-submit-pty"
+                       :buffer source-buffer
+                       :command
+                       (append
+                        (list
+                         "/bin/sh" "-c"
+                         (concat
+                          "pid_file=$1; shift; \"$@\" & helper_pid=$!; "
+                          "printf '%s\\n' \"$helper_pid\" > \"$pid_file\"; "
+                          "wait \"$helper_pid\"; sleep 2")
+                         "ai-code-editor-wrapper"
+                         pid-file)
+                        editor-command
+                        (list file))
+                       :connection-type 'pty
+                       :coding 'no-conversion
+                       :noquery t
+                       :filter
+                       (lambda (proc output)
+                         (ai-code-editor-viewport-filter-output proc output))))
+                (while (and (not (file-exists-p pid-file))
+                            (< (float-time) deadline))
+                  (accept-process-output nil 0.02))
+                (should (file-exists-p pid-file))
+                (with-temp-buffer
+                  (insert-file-contents pid-file)
+                  (setq helper-pid (string-to-number (buffer-string))))
+                (while (and (not submitted) (< (float-time) deadline))
+                  (accept-process-output nil 0.02))))
+            (should submitted)
+            (should-not helper-live-at-submit))
         (when (process-live-p process)
           (delete-process process))
         (ai-code-editor-viewport--cleanup-helper)
