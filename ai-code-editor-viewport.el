@@ -692,12 +692,21 @@ The plist records the response file, directory, submit intent, and arguments."
         (file-name-as-directory
          (file-truename temporary-file-directory)))))
 
-(defun ai-code-editor-viewport--write-status (file status)
-  "Write integer STATUS to the helper response FILE."
+(defun ai-code-editor-viewport--write-status
+    (file status &optional submit-token)
+  "Write integer STATUS and optional SUBMIT-TOKEN to helper response FILE."
   (unless (ai-code-editor-viewport--valid-status-file-p file)
     (error "Unsafe AI Code editor response file: %s" file))
+  (when (and submit-token
+             (or (not (stringp submit-token))
+                 (string-empty-p submit-token)
+                 (string-match-p "[[:space:]]" submit-token)))
+    (error "Invalid AI Code editor submit token"))
   (with-temp-file file
-    (insert (number-to-string status) "\n")))
+    (insert (number-to-string status))
+    (when submit-token
+      (insert " 1 " submit-token))
+    (insert "\n")))
 
 (defun ai-code-editor-viewport--requested-content-nonblank-p
     (directory arguments)
@@ -737,7 +746,7 @@ The plist records the response file, directory, submit intent, and arguments."
 PAYLOAD contains a response file, working directory, submit intent, and
 editor arguments.
 Return non-nil after saving every requested file."
-  (let (status-file completed succeeded submit-p response-written)
+  (let (status-file completed succeeded submit-p submit-token)
     (unwind-protect
         (condition-case err
             (let* ((request
@@ -764,14 +773,18 @@ Return non-nil after saving every requested file."
       (when status-file
         (condition-case err
             (progn
+              (when submit-p
+                (setq submit-token
+                      (ai-code-editor-viewport--prepare-submit-token
+                       source-buffer)))
               (ai-code-editor-viewport--write-status
-               status-file (if completed 0 1))
-              (setq response-written t))
+               status-file (if completed 0 1) submit-token))
           (error
+           (when submit-token
+             (ai-code-editor-viewport--discard-submit-token
+              source-buffer submit-token))
            (message "AI Code editor response failed: %s"
                     (error-message-string err))))))
-    (when (and submit-p response-written)
-      (ai-code-editor-viewport--schedule-submit source-buffer))
     succeeded))
 
 (provide 'ai-code-editor-viewport)

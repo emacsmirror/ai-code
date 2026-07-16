@@ -423,8 +423,8 @@
         (when (file-exists-p status-file)
           (delete-file status-file))))))
 
-(ert-deftest test-ai-code-editor-viewport--open-request-finish-submits-source ()
-  "Finishing an editor request should submit the restored terminal input."
+(ert-deftest test-ai-code-editor-viewport--open-request-finish-requests-submit ()
+  "Finishing should tell the helper to submit after releasing the terminal."
   (ai-code-editor-viewport-test--with-buffer
       (source-buffer "*codex[submit editor]*")
     (let* ((directory (make-temp-file "ai-code-editor-submit-" t))
@@ -434,18 +434,11 @@
            (payload
             (base64-encode-string
              (concat (mapconcat #'identity fields "\0") "\0")
-             t))
-           (ai-code-editor-viewport-submit-delay 0)
-           submitted-buffer)
+             t)))
       (unwind-protect
           (progn
             (with-temp-file file
               (insert "draft"))
-            (with-current-buffer source-buffer
-              (setq-local
-               ai-code-editor-viewport--submit-function
-               (lambda ()
-                 (setq submitted-buffer (current-buffer)))))
             (cl-letf (((symbol-function 'ai-code-editor-viewport--display)
                        (lambda (&rest _args) nil))
                       ((symbol-function 'recursive-edit)
@@ -453,23 +446,28 @@
                          (goto-char (point-max))
                          (insert " ready")
                          (ai-code-editor-viewport-finish)))
-                      ((symbol-function 'run-at-time)
-                       (lambda (_time _repeat function &rest arguments)
-                         (apply function arguments)))
                       ((symbol-function 'exit-recursive-edit)
                        (lambda () nil)))
               (should
                (ai-code-editor-viewport--open-request
                 source-buffer payload)))
-            (should (eq submitted-buffer source-buffer)))
+            (with-temp-buffer
+              (insert-file-contents status-file)
+              (let ((fields (split-string (string-trim (buffer-string)))))
+                (should (equal (seq-take fields 2) '("0" "1")))
+                (should (= (length (nth 2 fields)) 64))
+                (with-current-buffer source-buffer
+                  (should
+                   (equal (nth 2 fields)
+                          ai-code-editor-viewport--pending-submit-token))))))
         (when-let* ((buffer (get-file-buffer file)))
           (kill-buffer buffer))
         (when (file-exists-p status-file)
           (delete-file status-file))
         (delete-directory directory t)))))
 
-(ert-deftest test-ai-code-editor-viewport--open-request-general-editor-skips-submit ()
-  "A general editor request should save without submitting terminal input."
+(ert-deftest test-ai-code-editor-viewport--open-request-save-only-skips-submit ()
+  "A save-only editor request should not submit restored terminal input."
   (ai-code-editor-viewport-test--with-buffer
       (source-buffer "*codex[git editor]*")
     (let* ((directory (make-temp-file "ai-code-editor-general-" t))
