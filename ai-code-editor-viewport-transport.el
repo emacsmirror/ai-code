@@ -66,6 +66,9 @@
 (defvar ai-code-editor-viewport--helper-file nil
   "Path to the generated CLI editor helper.")
 
+(defvar ai-code-editor-viewport--helper-status-directory nil
+  "Canonical status directory used by the generated editor helper.")
+
 ;;;; Terminal transport
 
 (defun ai-code-editor-viewport--frame-prefix ()
@@ -213,11 +216,13 @@ When TOKEN is nil, discard any pending token."
     (ai-code-editor-viewport--dispatch-payload
      source-buffer payload))))
 
-(defun ai-code-editor-viewport--helper-content ()
-  "Return the terminal editor helper script content."
+(defun ai-code-editor-viewport--helper-content (&optional status-directory)
+  "Return the terminal editor helper script content.
+STATUS-DIRECTORY is where the helper creates its response files."
   (let ((status-template
          (expand-file-name "ai-code-editor-status-XXXXXX"
-                           temporary-file-directory)))
+                           (or status-directory
+                               temporary-file-directory))))
     (concat
      "#!/bin/sh\n"
      "submit=0\n"
@@ -284,22 +289,35 @@ When TOKEN is nil, discard any pending token."
   (when (and ai-code-editor-viewport--helper-file
              (file-exists-p ai-code-editor-viewport--helper-file))
     (delete-file ai-code-editor-viewport--helper-file))
-  (setq ai-code-editor-viewport--helper-file nil))
+  (setq ai-code-editor-viewport--helper-file nil
+        ai-code-editor-viewport--helper-status-directory nil))
 
 (defun ai-code-editor-viewport--ensure-helper ()
   "Return the executable used as the CLI editor command."
-  (let ((content (ai-code-editor-viewport--helper-content)))
+  (let* ((status-directory
+          (or (and ai-code-editor-viewport--helper-status-directory
+                   (file-directory-p
+                    ai-code-editor-viewport--helper-status-directory)
+                   ai-code-editor-viewport--helper-status-directory)
+              (file-name-as-directory
+               (file-truename temporary-file-directory))))
+         (content
+          (ai-code-editor-viewport--helper-content status-directory)))
     (unless (and ai-code-editor-viewport--helper-file
                  (file-executable-p ai-code-editor-viewport--helper-file)
                  (with-temp-buffer
                    (insert-file-contents ai-code-editor-viewport--helper-file)
                    (equal (buffer-string) content)))
       (ai-code-editor-viewport--cleanup-helper)
+      (setq ai-code-editor-viewport--helper-status-directory
+            status-directory)
       (setq ai-code-editor-viewport--helper-file
             (make-temp-file "ai-code-editor-"))
       (with-temp-file ai-code-editor-viewport--helper-file
         (insert content))
       (set-file-modes ai-code-editor-viewport--helper-file #o700))
+    (setq ai-code-editor-viewport--helper-status-directory
+          status-directory)
     ai-code-editor-viewport--helper-file))
 
 (add-hook 'kill-emacs-hook #'ai-code-editor-viewport--cleanup-helper)

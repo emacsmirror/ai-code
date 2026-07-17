@@ -681,16 +681,19 @@ The plist records the response file, directory, submit intent, and arguments."
 
 (defun ai-code-editor-viewport--valid-status-file-p (file)
   "Return non-nil when FILE is a helper-created response file."
-  (and (stringp file)
-       (file-name-absolute-p file)
-       (file-regular-p file)
-       (not (file-symlink-p file))
-       (string-prefix-p "ai-code-editor-status-"
-                        (file-name-nondirectory file))
-       (file-in-directory-p
-        (file-truename file)
-        (file-name-as-directory
-         (file-truename temporary-file-directory)))))
+  (let ((status-directory
+         (or ai-code-editor-viewport--helper-status-directory
+             temporary-file-directory)))
+    (and (stringp file)
+         (file-name-absolute-p file)
+         (file-regular-p file)
+         (not (file-symlink-p file))
+         (string-prefix-p "ai-code-editor-status-"
+                          (file-name-nondirectory file))
+         (file-in-directory-p
+          (file-truename file)
+          (file-name-as-directory
+           (file-truename status-directory))))))
 
 (defun ai-code-editor-viewport--write-status
     (file status &optional submit-token)
