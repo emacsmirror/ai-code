@@ -634,10 +634,11 @@
         (delete-directory directory t)))))
 
 (ert-deftest test-ai-code-editor-viewport--valid-status-file-p-is-scoped ()
-  "Only regular helper status files in Emacs's temp directory are valid."
+  "Only regular files in the helper status directory should be valid."
   (let* ((directory (make-temp-file "ai-code-editor-status-dir-" t))
          (other-directory (make-temp-file "ai-code-editor-other-dir-" t))
          (temporary-file-directory directory)
+         (ai-code-editor-viewport--helper-status-directory directory)
          (valid-file (make-temp-file "ai-code-editor-status-"))
          (wrong-name (make-temp-file "unrelated-status-"))
          (outside-file
@@ -652,6 +653,32 @@
           (should-not
            (ai-code-editor-viewport--valid-status-file-p outside-file)))
       (delete-directory directory t)
+      (delete-directory other-directory t))))
+
+(ert-deftest test-ai-code-editor-viewport--status-file-survives-temp-dir-change ()
+  "A helper status file should remain valid when the active temp dir changes."
+  (let* ((helper-directory
+          (make-temp-file "ai-code-editor-helper-dir-" t))
+         (other-directory
+          (make-temp-file "ai-code-editor-other-dir-" t))
+         (ai-code-editor-viewport--helper-file nil)
+         (ai-code-editor-viewport--helper-status-directory nil)
+         helper-file
+         status-file)
+    (unwind-protect
+        (progn
+          (let ((temporary-file-directory helper-directory))
+            (setq helper-file (ai-code-editor-viewport--ensure-helper))
+            (setq status-file (make-temp-file "ai-code-editor-status-")))
+          (let ((temporary-file-directory other-directory))
+            (should (equal (ai-code-editor-viewport--ensure-helper)
+                           helper-file))
+            (ai-code-editor-viewport--write-status status-file 0))
+          (with-temp-buffer
+            (insert-file-contents status-file)
+            (should (equal (buffer-string) "0\n"))))
+      (ai-code-editor-viewport--cleanup-helper)
+      (delete-directory helper-directory t)
       (delete-directory other-directory t))))
 
 (ert-deftest test-ai-code-editor-viewport--display-defaults-below-source-window ()

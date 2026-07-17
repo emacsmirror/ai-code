@@ -198,6 +198,7 @@
          (temporary-file-directory directory)
          (ai-code-editor-viewport-enabled t)
          (ai-code-editor-viewport--helper-file nil)
+         (ai-code-editor-viewport--helper-status-directory nil)
          environment
          editor)
     (unwind-protect
@@ -238,6 +239,7 @@
     (let* ((directory (make-temp-file "ai-code-editor-pty-" t))
            (temporary-file-directory directory)
            (ai-code-editor-viewport--helper-file nil)
+           (ai-code-editor-viewport--helper-status-directory nil)
            (environment (ai-code-editor-viewport-environment nil))
            (editor-command
             (split-string-shell-command
@@ -301,6 +303,7 @@
            (file (expand-file-name "draft.md" directory))
            (pid-file (expand-file-name "helper.pid" directory))
            (ai-code-editor-viewport--helper-file nil)
+           (ai-code-editor-viewport--helper-status-directory nil)
            (original-helper-content
             (symbol-function 'ai-code-editor-viewport--helper-content))
            environment
@@ -316,11 +319,12 @@
               (insert "draft"))
             (cl-letf (((symbol-function
                         'ai-code-editor-viewport--helper-content)
-                       (lambda ()
+                       (lambda (&optional status-directory)
                          (string-replace
                           "fi\nexit 0\n"
                           "fi\nsleep 1\nexit 0\n"
-                          (funcall original-helper-content)))))
+                          (funcall original-helper-content
+                                   status-directory)))))
               (setq environment (ai-code-editor-viewport-environment nil)))
             (setq editor-command
                   (split-string-shell-command
