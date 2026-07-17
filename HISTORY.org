@@ -2,6 +2,9 @@
 * Release history
 
 ** Main branch change
+- Unify prompt suffix injection with ordered providers
+- Fix editor viewport auto-submit timing, by cxa
+- Add Emacs editor viewports for AI CLI sessions, by cxa
 - Stabilize Ghostel image previews during scrolling and redraws, by fxa
 - Add lightweight grill-me prompt flow
 - Fix Ghostel input jitter caused by inline image anchoring, by fxa
