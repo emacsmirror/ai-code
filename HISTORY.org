@@ -2,11 +2,14 @@
 * Release history
 
 ** Main branch change
-- Unify prompt suffix injection with ordered providers
+- Fix editor viewport status validation after temp directory changes
+- Feat: Add native insertion into AI sessions
+- Merge Grill support into the harness module; Resolve conflict between and follow up suggestion
+- Refactor: Unify prompt suffix injection with ordered providers
 - Fix editor viewport auto-submit timing, by cxa
-- Add Emacs editor viewports for AI CLI sessions, by cxa
+- Feat: Add Emacs editor viewports for AI CLI sessions, by cxa
 - Stabilize Ghostel image previews during scrolling and redraws, by fxa
-- Add lightweight grill-me prompt flow
+- Feat: Add lightweight grill-me prompt flow
 - Fix Ghostel input jitter caused by inline image anchoring, by fxa
 - Support selected region as context in TDD write-test stage
 
