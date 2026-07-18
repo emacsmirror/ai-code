@@ -230,7 +230,8 @@ acting."
   '(ai-code-code-change
     ai-code-ask-question
     ai-code-implement-todo
-    ai-code-send-command)
+    ai-code-send-command
+    ai-code-refactor-book-method)
   "Interactive commands that offer the grill-me harness.")
 
 (defconst ai-code--grill-me-context-cache-key 'ai-code-grill-me-accepted
