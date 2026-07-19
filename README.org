@@ -537,6 +537,7 @@ To transfer development work between different AI coding backends (e.g., from Co
      (ai-code-set-backend 'open-interpreter)
      #+end_src
      Resume runs =interpreter resume --last= to reopen the most recent session.
+     How to setup [[https://www.openinterpreter.com/docs/terminal/kimi-k3?utm_source=github&utm_medium=referral&utm_campaign=readme&utm_content=kimi_k3_docs][Kimi K3 for Open Interpreter CLI]]
 
    You can add other backends by customizing the `ai-code-backends` variable.
 
