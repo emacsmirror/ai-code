@@ -2,6 +2,9 @@
 * Release history
 
 ** Main branch change
+
+** 1.90
+- Feat: add open interpreter cli support, initial code from swithin chan, modified by ai coding agent
 - Fix editor viewport status validation after temp directory changes
 - Feat: Add native insertion into AI sessions
 - Merge Grill support into the harness module; Resolve conflict between and follow up suggestion
