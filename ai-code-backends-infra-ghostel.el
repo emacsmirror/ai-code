@@ -76,6 +76,8 @@ enabled by default because it widens the terminal's local resource access."
   (defvar ghostel-command-start-functions)
   (defvar ghostel-kill-buffer-on-exit)
   (defvar ghostel-progress-function)
+  (defvar ghostel-program-status-functions)
+  (defvar ghostel-program-status)
   (defvar ghostel-set-title-function)
   (defvar ghostel--copy-mode-active)
   (defvar ghostel--fake-cursor-overlay)
@@ -319,6 +321,36 @@ STATE and PROGRESS use the signature of `ghostel-progress-function'."
                       #'ai-code-backends-infra-ghostel--progress)))
     (funcall ai-code-backends-infra-ghostel--progress-function state progress)))
 
+(defun ai-code-backends-infra-ghostel--program-status (_id _old _new)
+  "Snapshot Ghostel's current program status records.
+The hook supplies ID, OLD and NEW; read the complete current records so
+a child update or removal cannot overwrite the root with stale state.
+Leave presentation and notifications to Ghostel's existing handlers."
+  (when (ai-code-backends-infra-ghostel--ai-session-buffer-p)
+    (let* ((records ghostel-program-status)
+           ;; Match Ghostel's presentation: blocked/error children take
+           ;; precedence; ordinary child progress does not replace the root.
+           (record (cdr (or (cl-find-if
+                            (lambda (entry)
+                              (memq (plist-get (cdr entry) :state)
+                                    '(blocked error)))
+                            records)
+                           (assoc "" records))))
+           (state (plist-get record :state)))
+      (ai-code-backends-infra-ghostel--update-session-metadata
+       (current-buffer)
+       (list :ghostel-program-status (copy-tree records)
+             :ghostel-program-state state
+             :ghostel-program-kind (plist-get record :kind)
+             :ghostel-progress-state state
+             :ghostel-progress-value (plist-get record :progress)
+             :ghostel-progress-updated-at (float-time)
+             :ghostel-status (pcase state
+                               ('working 'running)
+                               ('blocked 'paused)
+                               ('error 'error)
+                               (_ 'idle)))))))
+
 (defun ai-code-backends-infra-ghostel--install-lifecycle-hooks ()
   "Install Ghostel lifecycle hooks for the current AI Code session."
   (when (boundp 'ghostel-command-start-functions)
@@ -327,13 +359,16 @@ STATE and PROGRESS use the signature of `ghostel-progress-function'."
   (when (boundp 'ghostel-command-finish-functions)
     (add-hook 'ghostel-command-finish-functions
               #'ai-code-backends-infra-ghostel--command-finish nil t))
-  (when (boundp 'ghostel-progress-function)
-    (unless (eq ghostel-progress-function
-                #'ai-code-backends-infra-ghostel--progress)
-      (setq-local ai-code-backends-infra-ghostel--progress-function
-                  ghostel-progress-function))
-    (setq-local ghostel-progress-function
-                #'ai-code-backends-infra-ghostel--progress)))
+  (if (boundp 'ghostel-program-status-functions)
+      (add-hook 'ghostel-program-status-functions
+                #'ai-code-backends-infra-ghostel--program-status nil t)
+    (when (boundp 'ghostel-progress-function)
+      (unless (eq ghostel-progress-function
+                  #'ai-code-backends-infra-ghostel--progress)
+        (setq-local ai-code-backends-infra-ghostel--progress-function
+                    ghostel-progress-function))
+      (setq-local ghostel-progress-function
+                  #'ai-code-backends-infra-ghostel--progress))))
 
 (defun ai-code-backends-infra-ghostel--trusted-local-session-p ()
   "Return non-nil when this Ghostel session can safely read local files."

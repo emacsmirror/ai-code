@@ -15,6 +15,8 @@
 (defvar ghostel-command-finish-functions)
 (defvar ghostel-command-start-functions)
 (defvar ghostel-progress-function)
+(defvar ghostel-program-status-functions)
+(defvar ghostel-program-status)
 (defvar ghostel-set-title-function)
 (defvar ghostel-kill-buffer-on-exit)
 (defvar ghostel-kitty-graphics-mediums)
@@ -1234,6 +1236,96 @@ run before the asynchronous link restoration re-applies cached properties."
         (ai-code-backends-infra-ghostel--progress 'remove nil)
         (should (eq (plist-get (car updates) :ghostel-progress-state) 'remove))
         (should (eq (plist-get (car updates) :ghostel-status) 'idle))))))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-program-status-hook-preserves-handlers ()
+  "New Ghostel status hooks should coexist with its UI and notification hooks."
+  (with-temp-buffer
+    (let ((notified nil))
+      (setq-local ai-code-backends-infra--session-terminal-backend 'ghostel)
+      (setq-local ghostel-program-status-functions
+                  (list (lambda (&rest _) (setq notified t))))
+      (setq-local ghostel-program-status '(("" :state working :progress 42)))
+      ;; A leftover old variable must not select the old API.
+      (setq-local ghostel-progress-function #'ignore)
+      (ai-code-backends-infra-ghostel--install-lifecycle-hooks)
+      (ai-code-backends-infra-ghostel--install-lifecycle-hooks)
+      (should (eq ghostel-progress-function #'ignore))
+      (should (= 1 (cl-count
+                    #'ai-code-backends-infra-ghostel--program-status
+                    ghostel-program-status-functions)))
+      (let (metadata)
+        (cl-letf (((symbol-function 'ai-code-session-update-metadata)
+                   (lambda (_buffer value) (setq metadata value))))
+          (run-hook-with-args 'ghostel-program-status-functions
+                              "" nil '(:state working :progress 42)))
+        (should notified)
+        (should (eq (plist-get metadata :ghostel-program-state) 'working))
+        (should (eq (plist-get metadata :ghostel-status) 'running))
+        (should (= (plist-get metadata :ghostel-progress-value) 42))))))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-program-status-without-legacy-variable ()
+  "Ghostel 0.58 should work when the removed progress variable is unbound."
+  (with-temp-buffer
+    (setq-local ai-code-backends-infra--session-terminal-backend 'ghostel)
+    (setq-local ghostel-program-status-functions nil)
+    (make-local-variable 'ghostel-progress-function)
+    (makunbound 'ghostel-progress-function)
+    (ai-code-backends-infra-ghostel--install-lifecycle-hooks)
+    (should-not (boundp 'ghostel-progress-function))
+    (should (local-variable-p 'ghostel-program-status-functions))
+    (should (memq #'ai-code-backends-infra-ghostel--program-status
+                  ghostel-program-status-functions))))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-program-status-record-lifecycle ()
+  "Child updates, clearing and acknowledgement should reflect Ghostel's records."
+  (with-temp-buffer
+    (setq-local ai-code-backends-infra--session-terminal-backend 'ghostel)
+    (setq-local ghostel-program-status-functions nil)
+    (ai-code-backends-infra-ghostel--install-lifecycle-hooks)
+    (let (metadata)
+      (cl-letf (((symbol-function 'ai-code-session-update-metadata)
+                 (lambda (_buffer value) (setq metadata value))))
+        (dolist (case '((working running) (blocked paused) (done idle)
+                        (error error) (idle idle)))
+          (setq-local ghostel-program-status
+                      (list (list "" :state (car case) :kind 'permission)))
+          (run-hook-with-args 'ghostel-program-status-functions
+                              "" nil (cdar ghostel-program-status))
+          (should (eq (plist-get metadata :ghostel-program-state) (car case)))
+          (should (eq (plist-get metadata :ghostel-status) (cadr case))))
+        (setq-local ghostel-program-status
+                    '(("child" :state working :progress 20)
+                      ("" :state done)))
+        (run-hook-with-args 'ghostel-program-status-functions
+                            "child" nil '(:state working :progress 20))
+        (should (eq (plist-get metadata :ghostel-program-state) 'done))
+        (should-not (plist-get metadata :ghostel-progress-value))
+        (setq-local ghostel-program-status
+                    '(("child" :state blocked :kind question)
+                      ("" :state working)))
+        (run-hook-with-args 'ghostel-program-status-functions
+                            "child" nil '(:state blocked :kind question))
+        (should (eq (plist-get metadata :ghostel-program-state) 'blocked))
+        (should (eq (plist-get metadata :ghostel-program-kind) 'question))
+        (should (equal (plist-get metadata :ghostel-program-status)
+                       ghostel-program-status))
+        (should-not (eq (plist-get metadata :ghostel-program-status)
+                        ghostel-program-status))
+        (setq-local ghostel-program-status nil)
+        (run-hook-with-args 'ghostel-program-status-functions
+                            "" '(:state done) nil)
+        (should-not (plist-get metadata :ghostel-program-state))
+        (should-not (plist-get metadata :ghostel-program-kind))
+        (should-not (plist-get metadata :ghostel-program-status))
+        (should (eq (plist-get metadata :ghostel-status) 'idle))))))
+
+(ert-deftest test-ai-code-backends-infra-ghostel-program-status-ignores-non-ai-buffer ()
+  "Program status callbacks must not register unrelated terminal buffers."
+  (with-temp-buffer
+    (let ((ghostel-program-status '(("" :state error))))
+      (cl-letf (((symbol-function 'ai-code-session-update-metadata)
+                 (lambda (&rest _) (ert-fail "Updated a non-AI buffer"))))
+        (ai-code-backends-infra-ghostel--program-status "" nil '(:state error))))))
 
 (ert-deftest test-ai-code-backends-infra-ghostel-linum-overlay-does-not-inhibit-redraw ()
   "Linum margin display overlays should not inhibit Ghostel redraws.
