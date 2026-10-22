@@ -464,7 +464,10 @@
         (setq-local ghostel--cursor-char-pos (point-max))
         (cl-letf (((symbol-function
                     'ai-code-ghostel-image-preview--window-pixel-anchor-state)
-                   (lambda (_window) 'preserve)))
+                   (lambda (_window) 'preserve))
+                  ;; Batch Emacs has no display, so visibility is stubbed.
+                  ((symbol-function 'pos-visible-in-window-p)
+                   (lambda (&rest _args) t)))
           (let ((state
                  (ai-code-ghostel-image-preview--capture-window-state
                   window)))
@@ -479,6 +482,36 @@
                   window)))
             (unwind-protect
                 (should (eq (plist-get state :intent) 'user-scroll))
+              (ai-code-ghostel-image-preview--release-window-state
+               state))))))))
+
+(ert-deftest test-ai-code-ghostel-image-preview--scrolled-live-cursor-preserves ()
+  "A window scrolled back with the input cursor still visible is not following."
+  (save-window-excursion
+    (with-temp-buffer
+      (let ((window (selected-window))
+            cursor)
+        (insert "output\n")
+        (setq cursor (point))
+        (insert "input\n")
+        (dotimes (index 200)
+          (insert (format "status row %03d\n" index)))
+        (set-window-buffer window (current-buffer))
+        (set-window-start window (point-min))
+        (set-window-point window cursor)
+        (setq-local ghostel--cursor-char-pos cursor)
+        (cl-letf (((symbol-function
+                    'ai-code-ghostel-image-preview--window-pixel-anchor-state)
+                   (lambda (_window) 'preserve))
+                  ;; The input row is on screen, the live end below it is not.
+                  ((symbol-function 'pos-visible-in-window-p)
+                   (lambda (&optional pos _window _partially)
+                     (< pos (point-max)))))
+          (let ((state
+                 (ai-code-ghostel-image-preview--capture-window-state
+                  window)))
+            (unwind-protect
+                (should (eq (plist-get state :intent) 'preserve))
               (ai-code-ghostel-image-preview--release-window-state
                state))))))))
 

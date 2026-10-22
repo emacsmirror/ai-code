@@ -674,7 +674,10 @@ previewed."
       'preserve)))
 
 (defun ai-code-ghostel-image-preview--window-at-live-cursor-p (window)
-  "Return non-nil when WINDOW point tracks Ghostel's live cursor."
+  "Return non-nil when WINDOW point tracks Ghostel's live cursor.
+WINDOW must also show the live end of the buffer: a window scrolled a few
+rows back keeps the input cursor, and so its point, on screen, and
+treating it as following would snap it to the bottom on every redraw."
   (when (and (window-live-p window)
              (boundp 'ghostel--cursor-char-pos)
              (integer-or-marker-p ghostel--cursor-char-pos))
@@ -683,7 +686,8 @@ previewed."
                     ghostel--cursor-char-pos)))
       (and cursor
            (= (window-point window)
-              (max (point-min) (min (point-max) cursor)))))))
+              (max (point-min) (min (point-max) cursor)))
+           (pos-visible-in-window-p (point-max) window t)))))
 
 (defun ai-code-ghostel-image-preview--capture-window-state (window)
   "Capture semantic and pixel state for WINDOW."
