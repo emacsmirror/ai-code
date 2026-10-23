@@ -20,6 +20,7 @@
 (require 'subr-x)
 (require 'ai-code-editor-viewport)
 (require 'ai-code-session)
+(require 'ai-code-session-attention)
 (require 'ai-code-session-link)
 ;; Terminal-specific implementations live in dedicated modules so this
 ;; file can stay focused on shared session orchestration.
@@ -385,10 +386,12 @@ the current buffer is an AI session buffer, apply these transformations:
     (with-current-buffer buffer
       (if (ai-code-backends-infra--idle-delay-elapsed-p)
           (let ((visible (ai-code-backends-infra--buffer-user-visible-p buffer)))
+            (ai-code-session-attention-set-working buffer nil)
             (if visible
                 (setq ai-code-backends-infra--response-seen t)
               (when (not ai-code-backends-infra--response-seen)
                 (setq ai-code-backends-infra--response-seen t)
+                (ai-code-session-attention-mark buffer 'done)
                 (when (require 'ai-code-notifications nil t)
                   (when (fboundp 'ai-code-notifications-response-ready)
                     (let ((buffer-name (buffer-name buffer)))
@@ -426,6 +429,8 @@ The timer is reset only after meaningful output is observed."
   "Record meaningful output and schedule idle tracking."
   (setq ai-code-backends-infra--response-seen nil
         ai-code-backends-infra--last-meaningful-output-time (float-time))
+  (ai-code-session-attention-clear (current-buffer) 'done)
+  (ai-code-session-attention-set-working (current-buffer) t)
   (ai-code-backends-infra--schedule-idle-check))
 
 (defun ai-code-backends-infra--configure-session-input-shortcuts ()
@@ -1737,6 +1742,7 @@ When PREFIX and WORKING-DIR are provided, select from multiple sessions."
                   source-buffer)))
     (when (fboundp 'ai-code-mcp-agent-refresh-source-context)
       (ai-code-mcp-agent-refresh-source-context buffer source-buffer))
+    (ai-code-session-note-prompt buffer line)
     (with-current-buffer buffer
       (ai-code-backends-infra--remember-session-buffer prefix working-dir buffer)
       (if (and (string-match-p "\n" line)
