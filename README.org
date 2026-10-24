@@ -736,6 +736,10 @@ To transfer development work between different AI coding backends (e.g., from Co
 }
 #+end_src
 
+*** Q: How can I troubleshoot a CLI that exits immediately on startup?
+
+- A: AI Code preserves and displays the failed terminal buffer and adds a startup summary containing the backend, requested executable, working directory, process status, and exit status when known. The same summary appears in =*Messages*=. Arguments, environment values, and terminal output are omitted from the added diagnostics. Terminal setup errors, such as a missing dependency, retain their original error messages. A native terminal event pipe may not expose the CLI child's exit code, in which case the exit status is =unknown=.
+
 *** Q: During using ghostel terminal backend, for long conversation, I found the earliest conversation got truncated
 
 - A: Ghostel trims old output after `ghostel-max-scrollback` bytes are used. The default is 5 MB, so increase it before starting Ghostel sessions.

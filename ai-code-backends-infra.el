@@ -22,6 +22,7 @@
 (require 'ai-code-session)
 (require 'ai-code-session-attention)
 (require 'ai-code-session-link)
+(require 'ai-code-startup-diagnostics)
 ;; Terminal-specific implementations live in dedicated modules so this
 ;; file can stay focused on shared session orchestration.
 (require 'ai-code-backends-infra-vterm)
@@ -1419,14 +1420,18 @@ behavior."
    buffer working-dir prefix task-file)
   (ai-code-backends-infra--display-buffer-in-side-window buffer))
 
-(defun ai-code-backends-infra--handle-session-start-failure (buffer session-key process-table)
-  "Handle startup failure for BUFFER and SESSION-KEY in PROCESS-TABLE."
-  (remhash session-key process-table)
-  (if (buffer-live-p buffer)
-      (progn
-        (pop-to-buffer buffer)
-        (message "CLI failed to start - see buffer for error details"))
-    (message "CLI failed to start - process exited immediately")))
+(defun ai-code-backends-infra--handle-session-start-failure
+    (buffer session-key process-table &optional prefix command working-dir)
+  "Handle startup failure for BUFFER and SESSION-KEY in PROCESS-TABLE.
+PREFIX, COMMAND, and WORKING-DIR identify the failed launch."
+  (let ((process (gethash session-key process-table)))
+    (remhash session-key process-table)
+    (ai-code-startup-diagnostics-report
+     buffer process
+     (or prefix
+         (when (buffer-live-p buffer)
+           (buffer-local-value 'ai-code-backends-infra--session-prefix buffer)))
+     command working-dir)))
 
 (defun ai-code-backends-infra--cleanup-failed-launch (cleanup-fn)
   "Call CLEANUP-FN after a failed launch without masking the startup error."
@@ -1640,7 +1645,10 @@ TASK-FILE and SOURCE-BUFFER preserve file-to-session binding."
           (ai-code-backends-infra--handle-session-start-failure
            new-buffer
            session-key
-           process-table)
+           process-table
+           prefix
+           command
+           working-dir)
         (ai-code-backends-infra--cleanup-failed-launch cleanup-fn)))))
 
 (defun ai-code-backends-infra--toggle-or-create-session (working-dir buffer-name process-table command

@@ -4080,9 +4080,10 @@ The prefix argument should also force instance-name prompting."
              session-key
              process-table)
             (should-not (gethash session-key process-table))
-            (should (equal (nreverse calls)
-                           (list (list :pop buffer)
-                                 "CLI failed to start - see buffer for error details")))))
+            (setq calls (nreverse calls))
+            (should (equal (car calls) (list :pop buffer)))
+            (should (string-prefix-p "CLI failed to start [backend=unknown"
+                                     (cadr calls)))))
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
 
