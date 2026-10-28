@@ -570,6 +570,19 @@
                           "Do not replace source references"
                           "Splunk log" "SPL/query" "absolute time range"
                           "cannot be accessed" "not independent proof"))
+      (should (string-match-p (regexp-quote instruction) prompt)))
+    (should (< (string-match (regexp-quote "** References\n") prompt)
+               (string-match (regexp-quote "** Goal and Acceptance Criteria\n") prompt)))
+    (should-not (string-match-p "Reconcile the latest handoff" prompt))
+    (dolist (instruction '("original/raw material as primary evidence"
+                          "secondary discovery pointers, not evidence"
+                          "Follow their references to original sources"
+                          "Do not recursively summarize"
+                          "only an AI summary is available"
+                          "label the claim unverified"
+                          "prefer the original"
+                          "label origin as" "exact source text"
+                          "do not duplicate previous generated briefings"))
       (should (string-match-p (regexp-quote instruction) prompt)))))
 
 (ert-deftest test-task--resume-selects-existing-task-outside-org ()
