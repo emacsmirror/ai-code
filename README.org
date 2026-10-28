@@ -585,8 +585,9 @@ The prompt references the whole saved task file with =@file= and asks the agent
 to read every section, regardless of the selected region or narrowed Org view.
 
 - Preserve original context sources (Radar, Slack threads, PRs, GitHub links,
-  meeting notes and Splunk logs), each with a brief summary and next-use hint.
-  Keep supplied Splunk queries and time ranges alongside their search links.
+  meeting notes and Splunk logs) first, with raw excerpts/signals, brief descriptions
+  and next-use hints. Prior AI summaries/handoffs are pointers to originals, not
+  evidence; do not recursively summarize them. Keep Splunk queries and time ranges.
 - Resume works without a prior handoff. Missing information and unread sources
   stay explicit; external discussions are not automatically refreshed.
 - The agent writes only the task briefing and waits before tests or code changes.
