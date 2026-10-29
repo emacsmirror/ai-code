@@ -233,12 +233,12 @@ returns that function's name.  Otherwise returns the result of
                                              (t current-func))))))))))
     resolved-func))
 
-(defun ai-code--org-section-candidates ()
+(defun ai-code--org-section-candidates (&optional include-done)
   "Return the Org sections enclosing point, innermost first.
 Each element is a plist with `:heading-line', `:heading-begin',
 `:heading-end', `:begin-line', `:end-line' and `:label'.  Sections whose
-entry is DONE are omitted.  Returns nil outside `org-mode' and when point
-precedes the first headline."
+entry is DONE are omitted unless INCLUDE-DONE is non-nil.  Returns nil
+outside `org-mode' and when point precedes the first headline."
   (when (derived-mode-p 'org-mode)
     (save-excursion
       (when (and (ignore-errors (org-back-to-heading t) t)
@@ -253,8 +253,9 @@ precedes the first headline."
                    (end-line (save-excursion
                                (org-end-of-subtree t)
                                (line-number-at-pos (point)))))
-              (unless (or (org-entry-is-done-p)
-                          (string-match-p "^\\*+ DONE " heading-line))
+              (when (or include-done
+                        (not (or (org-entry-is-done-p)
+                                 (string-match-p "^\\*+ DONE " heading-line))))
                 (push (list :heading-line heading-line
                             :heading-begin (line-beginning-position)
                             :heading-end (line-end-position)
@@ -552,18 +553,20 @@ Returns non-nil if handled and the caller should exit."
         (indent-according-to-mode)))
     t))
 
-(defun ai-code--implement-todo--get-org-todo-section-info ()
+(defun ai-code--implement-todo--get-org-todo-section-info (&optional include-done ignore-region)
   "Return the selected Org section info as a plist, or nil.
 The plist contains `:heading-line', `:content', `:inlined',
 `:line-number', `:end-line-number' and `:reference'.  Point may sit on a
 headline or anywhere inside its body; when the section has enclosing
 ancestors the user picks which one to use.  An active region suppresses
-Org scope so the region stays authoritative.  Sections longer than
+Org scope so the region stays authoritative, unless IGNORE-REGION is non-nil.
+INCLUDE-DONE also allows completed headlines for independent verification.
+Sections longer than
 `ai-code-org-section-inline-max-lines' carry `:reference' in place of
 `:content', unless the buffer is modified or no reference is available."
-  (unless (region-active-p)
+  (unless (and (region-active-p) (not ignore-region))
     (let ((section (ai-code--org-select-section
-                    (ai-code--org-section-candidates))))
+                    (ai-code--org-section-candidates include-done))))
       (when section
         (let* ((begin-line (plist-get section :begin-line))
                (end-line (plist-get section :end-line))

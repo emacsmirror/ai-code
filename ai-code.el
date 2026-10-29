@@ -135,6 +135,7 @@
 (require 'ai-code-change)
 (require 'ai-code-annotation)
 (require 'ai-code-discussion)
+(require 'ai-code-verify)
 (require 'ai-code-codex-cli)
 (require 'ai-code-aider-cli)
 (require 'ai-code-github-copilot-cli)
@@ -305,6 +306,26 @@ which of the two commands to run."
     (ai-code-agent-handoff arg))
    (t
     (ai-code-session-checkpoint))))
+
+(defconst ai-code--task-file-action-choices
+  '(("Resume task briefing" . ai-code-task-resume)
+    ("Verify branch / PR vs requirements" . ai-code-verify-current-work)
+    ("Grow next step" . ai-code-grow-next-step)
+    ("Handoff / checkpoint" . ai-code-agent-handoff-or-checkpoint))
+  "Choices offered by `ai-code-task-file-action'.")
+
+;;;###autoload
+(defun ai-code-task-file-action ()
+  "Choose a task file action and run it interactively.
+The selected command keeps its own prefix argument and region handling."
+  (interactive)
+  (let* ((default-choice (caar ai-code--task-file-action-choices))
+         (choice (completing-read "Task file action: "
+                                  (mapcar #'car ai-code--task-file-action-choices)
+                                  nil t nil nil default-choice))
+         (command (alist-get choice ai-code--task-file-action-choices
+                             nil nil #'string=)))
+    (call-interactively command)))
 
 ;;;###autoload
 (defun ai-code-cli-resume-with-session-checkpoint (&optional arg prompt-for-checkpoint)
@@ -637,7 +658,6 @@ Shows the current backend label to the right."
   (ai-code--infix-select-code-change-auto-test)
   ("r" "Refactor Code" ai-code-refactor-book-method)
   ("t" "Test Driven Development" ai-code-tdd-cycle)
-  ("y" "Grow Next Step" ai-code-grow-next-step)
   ("v" "GitHub PR AI Action" ai-code-pull-or-review-diff-file)
   ;; DONE: Move ai-code-derive-architecture-guardrails ai-code-file.el. Add a new menu item: "Derive architecture document", bind to D. It let user choose from complet-reading: Derive Architecture Guardrails, and Derive DDD Context for Repo. No need to keep other two separate menu items
   ("A" "Derive architecture document" ai-code-derive-architecture-document)
@@ -651,8 +671,8 @@ Shows the current backend label to the right."
 (transient-define-group ai-code--menu-other-tools
   (ai-code--infix-toggle-auto-follow-up)
   ("k" "Create/Open task file" ai-code-create-or-open-task-file)
-  ("K" "Resume task briefing" ai-code-task-resume)
-  ("H" "Handoff / checkpoint" ai-code-agent-handoff-or-checkpoint)
+  ;; DONE: merge ai-code-task-resume, ai-code-verify-current-work, ai-code-agent-handoff-or-checkpoint, ai-code-grow-next-step into one menu item: eg. task file action, and use completing-read to let user choose which one to run.
+  ("K" "Task file action" ai-code-task-file-action)
   ("/" "Search notes with AI" ai-code-search-notes-with-ai)
   ("n" "Take notes from AI session" ai-code-take-notes)
   ("p" "Open prompt history file" ai-code-open-prompt-file)
