@@ -82,7 +82,10 @@ Can be either `vterm', `eat', or `ghostel'."
   :group 'ai-code-backends-infra)
 
 (defcustom ai-code-backends-infra-prevent-reflow-glitch t
-  "Workaround for terminal scrolling bug #1422."
+  "Workaround for terminal scrolling bug #1422.
+For eat, suppress height-only terminal reflows.  For vterm, ignore
+one-row height-only changes, such as a mode line or echo area growing,
+so the CLI does not repaint its whole screen."
   :type 'boolean
   :group 'ai-code-backends-infra)
 

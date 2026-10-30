@@ -18,6 +18,7 @@
 (require 'ai-code-session)
 
 (defvar tab-bar-tab-name-format-functions)
+(defvar ai-code-session-attention-mode)
 
 (defgroup ai-code-session-attention nil
   "Show AI sessions that need the user's attention."
@@ -67,8 +68,16 @@ Symbols mark states that need the user; circles are ambient status.")
    (ai-code-session-buffer session)
    (append (list :attention state :attention-since (and state (float-time)))
            (unless state (list :quiet-since (float-time)))))
-  ;; This also redraws the tab bar.
-  (force-mode-line-update t))
+  (ai-code-session-attention--redraw))
+
+(defun ai-code-session-attention--redraw ()
+  "Redraw the tab bar badges when `ai-code-session-attention-mode' is on.
+Without the mode nothing shows the state, and a global mode-line redraw
+can change mode-line heights, resizing terminal windows and making AI
+CLIs repaint their whole screen."
+  (when ai-code-session-attention-mode
+    ;; This also redraws the tab bar.
+    (force-mode-line-update t)))
 
 (defun ai-code-session-attention-mark (buffer state)
   "Mark the session in BUFFER as needing attention with STATE.
@@ -107,7 +116,7 @@ The tab bar is redrawn only when the state changes."
     (ai-code-session-update-metadata
      buffer (list :working (and working t)
                   (if working :working-since :quiet-since) (float-time)))
-    (force-mode-line-update t)))
+    (ai-code-session-attention--redraw)))
 
 (defun ai-code-session-attention--clear-visible (&optional _frame)
   "Clear attention for sessions now shown in a live window."

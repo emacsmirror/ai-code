@@ -3779,6 +3779,132 @@ The prefix argument should also force instance-name prompting."
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
 
+(ert-deftest test-ai-code-backends-infra-vterm-preserve-viewport-on-resize-freezes-session-buffer ()
+  "The resize advice keeps a scrolled-away session viewport stable.
+`vterm--set-size' redraws and recenters synchronously, bypassing
+`vterm--delayed-redraw', so a resize must not yank the viewport."
+  (let* ((buffer (generate-new-buffer "*testclaude[resize-freeze]*"))
+         (process (make-pipe-process :name "ai-code-resize-test"
+                                     :buffer buffer :noquery t)))
+    (unwind-protect
+        (save-window-excursion
+          (switch-to-buffer buffer)
+          (with-current-buffer buffer
+            (setq-local vterm-copy-mode nil)
+            (dotimes (line 80)
+              (insert (format "line %02d\n" line)))
+            (goto-char (point-min))
+            (forward-line 25)
+            (set-window-start (selected-window) (point))
+            (set-window-point (selected-window) (point))
+            (let ((original-start (window-start))
+                  result)
+              (cl-letf (((symbol-function
+                          'ai-code-backends-infra--vterm-window-scrolled-away-p)
+                         (lambda (_window) t)))
+                (setq result
+                      (ai-code-backends-infra--vterm-preserve-viewport-on-resize
+                       (lambda (_process _windows)
+                         (goto-char (point-max))
+                         (set-window-start (selected-window) (point-max))
+                         (set-window-point (selected-window) (point-max))
+                         '(80 . 24))
+                       process (list (selected-window)))))
+              (should (equal result '(80 . 24)))
+              (should (= (window-start) original-start)))))
+      (delete-process process)
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest test-ai-code-backends-infra-vterm-preserve-viewport-on-resize-passes-through-other-buffers ()
+  "Non-session buffers resize without viewport preservation."
+  (let* ((buffer (generate-new-buffer " *ai-code-vterm-plain-resize*"))
+         (process (make-pipe-process :name "ai-code-plain-resize-test"
+                                     :buffer buffer :noquery t))
+         (preserved nil))
+    (unwind-protect
+        (cl-letf (((symbol-function
+                    'ai-code-backends-infra--vterm-render-preserving-copy-mode-view)
+                   (lambda (render-fn)
+                     (setq preserved t)
+                     (funcall render-fn))))
+          (should (equal (ai-code-backends-infra--vterm-preserve-viewport-on-resize
+                          (lambda (_process _windows) '(80 . 24))
+                          process nil)
+                         '(80 . 24)))
+          (should-not preserved))
+      (delete-process process)
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(defun test-ai-code-backends-infra--vterm-resize-with-size (size applied)
+  "Run the vterm resize advice for a session window that wants SIZE.
+APPLIED is the window size last applied to the terminal.  Return a list
+of whether the terminal was resized, the advice result and the applied
+size afterwards."
+  (let* ((buffer (generate-new-buffer "*testclaude[resize-jitter]*"))
+         (process (make-pipe-process :name "ai-code-resize-jitter-test"
+                                     :buffer buffer :noquery t))
+         (window-adjust-process-window-size-function
+          (lambda (_process _windows) size))
+         (resized nil))
+    (unwind-protect
+        (with-current-buffer buffer
+          (setq-local ai-code-backends-infra--vterm-applied-window-size applied)
+          (let ((result (ai-code-backends-infra--vterm-preserve-viewport-on-resize
+                         (lambda (_process _windows) (setq resized t) size)
+                         process nil)))
+            (list resized result
+                  ai-code-backends-infra--vterm-applied-window-size)))
+      (delete-process process)
+      (kill-buffer buffer))))
+
+(ert-deftest test-ai-code-backends-infra-vterm-resize-skips-one-row-height-jitter ()
+  "A one-row height-only change must not resize the terminal.
+Mode-line or echo-area height changes make the window gain or lose one
+line; resizing for that sends SIGWINCH and the CLI repaints its screen."
+  (let ((ai-code-backends-infra-prevent-reflow-glitch t))
+    (should (equal (test-ai-code-backends-infra--vterm-resize-with-size
+                    '(80 . 58) '(80 . 59))
+                   '(nil nil (80 . 59))))
+    (should (equal (test-ai-code-backends-infra--vterm-resize-with-size
+                    '(80 . 60) '(80 . 59))
+                   '(nil nil (80 . 59))))))
+
+(ert-deftest test-ai-code-backends-infra-vterm-resize-applies-real-resizes ()
+  "Width changes, multi-row height changes and first sizes still resize."
+  (let ((ai-code-backends-infra-prevent-reflow-glitch t))
+    (should (equal (test-ai-code-backends-infra--vterm-resize-with-size
+                    '(80 . 50) '(80 . 59))
+                   '(t (80 . 50) (80 . 50))))
+    (should (equal (test-ai-code-backends-infra--vterm-resize-with-size
+                    '(100 . 58) '(80 . 59))
+                   '(t (100 . 58) (100 . 58))))
+    (should (equal (test-ai-code-backends-infra--vterm-resize-with-size
+                    '(80 . 58) nil)
+                   '(t (80 . 58) (80 . 58))))))
+
+(ert-deftest test-ai-code-backends-infra-vterm-resize-applies-jitter-without-glitch-prevention ()
+  "Disabling reflow glitch prevention resizes for every height change."
+  (let ((ai-code-backends-infra-prevent-reflow-glitch nil))
+    (should (equal (test-ai-code-backends-infra--vterm-resize-with-size
+                    '(80 . 58) '(80 . 59))
+                   '(t (80 . 58) (80 . 58))))))
+
+(ert-deftest test-ai-code-backends-infra-configure-vterm-buffer-installs-resize-viewport-advice ()
+  "Configuring a vterm buffer should wrap vterm's terminal resize."
+  (with-temp-buffer
+    (setq-local ai-code-backends-infra--session-terminal-backend 'vterm)
+    (let ((ai-code-backends-infra--vterm-advices-installed nil)
+          (installed nil))
+      (cl-letf (((symbol-function 'advice-add)
+                 (lambda (symbol _how function &rest _args)
+                   (push (cons symbol function) installed))))
+        (ai-code-backends-infra--configure-vterm-buffer))
+      (should (member (cons 'vterm--window-adjust-process-window-size
+                            #'ai-code-backends-infra--vterm-preserve-viewport-on-resize)
+                      installed)))))
+
 (ert-deftest test-ai-code-backends-infra-configure-vterm-buffer-installs-redraw-viewport-advice ()
   "Configuring a vterm buffer should wrap vterm's delayed redraw."
   (with-temp-buffer

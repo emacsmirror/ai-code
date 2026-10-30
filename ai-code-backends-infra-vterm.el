@@ -55,6 +55,7 @@
 (declare-function vterm--delayed-redraw "vterm" (buffer))
 
 (defvar ai-code-backends-infra-strip-alternate-screen)
+(defvar ai-code-backends-infra-prevent-reflow-glitch)
 (defvar ai-code-backends-infra--session-terminal-backend)
 (defvar vterm--term)
 (defvar vterm-copy-mode)
@@ -75,6 +76,8 @@ updates are handled separately via carriage return counting.")
 
 (defvar-local ai-code-backends-infra--vterm-render-queue nil)
 (defvar-local ai-code-backends-infra--vterm-render-timer nil)
+(defvar-local ai-code-backends-infra--vterm-applied-window-size nil
+  "Window size (WIDTH . HEIGHT) last applied to the vterm terminal.")
 (defvar-local ai-code-backends-infra--vterm-dim-foreground-active nil
   "Non-nil when AI Code injected an ANSI gray foreground for SGR dim text.")
 
@@ -329,6 +332,44 @@ in place.  Other buffers redraw untouched."
       (ai-code-backends-infra--vterm-render-preserving-copy-mode-view
        (lambda () (funcall orig-fun buffer))))))
 
+(defun ai-code-backends-infra--vterm-height-jitter-p (size)
+  "Return non-nil when SIZE moves the terminal height by one row only.
+SIZE is the (WIDTH . HEIGHT) window size wanted for the terminal.
+Mode-line or echo-area height changes make a window gain or lose a
+single line, and resizing the terminal for that sends SIGWINCH, which
+makes the CLI repaint its whole screen."
+  (let ((applied ai-code-backends-infra--vterm-applied-window-size))
+    (and ai-code-backends-infra-prevent-reflow-glitch
+         (consp applied)
+         (consp size)
+         (numberp (cdr size))
+         (equal (car size) (car applied))
+         (= 1 (abs (- (cdr size) (cdr applied)))))))
+
+(defun ai-code-backends-infra--vterm-preserve-viewport-on-resize
+    (orig-fun process windows)
+  "Keep frozen viewports stable while ORIG-FUN resizes PROCESS's terminal.
+`vterm--set-size' redraws synchronously and recenters on the terminal
+cursor without going through `vterm--delayed-redraw', so session buffers
+need the same protection on resize.  One-row height jitter of WINDOWS is
+ignored, see `ai-code-backends-infra--vterm-height-jitter-p'.  The
+return value of ORIG-FUN is kept for `window--adjust-process-windows'."
+  (let ((buffer (process-buffer process)))
+    (if (not (and (buffer-live-p buffer)
+                  (ai-code-backends-infra--session-buffer-p buffer)))
+        (funcall orig-fun process windows)
+      (with-current-buffer buffer
+        (let ((size (funcall window-adjust-process-window-size-function
+                             process windows)))
+          (unless (ai-code-backends-infra--vterm-height-jitter-p size)
+            (let ((result
+                   (ai-code-backends-infra--vterm-render-preserving-copy-mode-view
+                    (lambda () (funcall orig-fun process windows)))))
+              ;; vterm returns nil without resizing in `vterm-copy-mode'.
+              (when result
+                (setq ai-code-backends-infra--vterm-applied-window-size size))
+              result)))))))
+
 (defun ai-code-backends-infra--vterm-render-queued-output (orig-fun buffer)
   "Render queued vterm output for BUFFER using ORIG-FUN."
   (when (buffer-live-p buffer)
@@ -433,6 +474,8 @@ returns to normal terminal interaction."
       (advice-add 'vterm--filter :around #'ai-code-backends-infra--vterm-smart-renderer))
     (advice-add 'vterm--delayed-redraw :around
                 #'ai-code-backends-infra--vterm-preserve-viewport-on-redraw)
+    (advice-add 'vterm--window-adjust-process-window-size :around
+                #'ai-code-backends-infra--vterm-preserve-viewport-on-resize)
     (setq ai-code-backends-infra--vterm-advices-installed t)))
 
 (defun ai-code-backends-infra-vterm-create-session (buffer-name working-dir command env-vars)

@@ -116,7 +116,8 @@ The selected window shows a scratch buffer, so the sessions start hidden."
 (ert-deftest ai-code-test-attention-set-working-redraws-only-on-change ()
   "Repeated output must not redraw the tab bar each time."
   (ai-code-test-attention--with-sessions (a)
-    (let ((redraws 0))
+    (let ((ai-code-session-attention-mode t)
+          (redraws 0))
       (cl-letf (((symbol-function 'force-mode-line-update)
                  (lambda (&rest _) (setq redraws (1+ redraws)))))
         (ai-code-session-attention-set-working a t)
@@ -124,6 +125,23 @@ The selected window shows a scratch buffer, so the sessions start hidden."
         (ai-code-session-attention-set-working a nil)
         (ai-code-session-attention-set-working a nil))
       (should (= redraws 2)))))
+
+(ert-deftest ai-code-test-attention-records-state-without-redraw-when-mode-off ()
+  "With the mode off, state changes are recorded without redrawing mode lines.
+A global redraw on every working/idle flip can change mode-line heights,
+which resizes terminal windows and makes AI CLIs repaint their screen."
+  (ai-code-test-attention--with-sessions (a)
+    (let ((ai-code-session-attention-mode nil)
+          (redraws 0))
+      (cl-letf (((symbol-function 'force-mode-line-update)
+                 (lambda (&rest _) (setq redraws (1+ redraws)))))
+        (ai-code-session-attention-set-working a t)
+        (ai-code-session-attention-set-working a nil)
+        (ai-code-session-attention-mark a 'done)
+        (should (eq (ai-code-test-attention--state a) 'done))
+        (ai-code-session-attention-clear a))
+      (should-not (ai-code-test-attention--state a))
+      (should (= redraws 0)))))
 
 (ert-deftest ai-code-test-attention-records-state-timestamps ()
   "State changes record when working started and when the session went quiet."
